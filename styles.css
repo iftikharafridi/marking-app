@@ -21,225 +21,206 @@ body {
     line-height: 1.6;
     color: var(--text-dark);
     background-color: #f5f5f5;
-    padding: 20px;
-    max-width: 100vw;
-    overflow-x: hidden;
+    padding: clamp(0.5rem, 3vw, 1.5rem);
 }
 
+/* Fluid app container */
 .app-container {
-    width: 95%;
-    max-width: 1600px;
-    min-width: 320px;
-    margin: 20px auto;
+    width: min(98%, 100rem); /* Will never exceed 100rem but adapts to screen */
+    margin-inline: auto; /* Center horizontally */
     background: white;
-    border-radius: 8px;
+    border-radius: clamp(0.5rem, 1.5vw, 0.8rem);
     box-shadow: 0 0 10px rgba(0,0,0,0.1);
     overflow: hidden;
-    transition: all 0.3s ease;
+    min-height: 100vh;
 }
 
+/* Header Section */
 header {
     background-color: var(--primary-color);
     color: var(--text-light);
-    padding: 20px;
+    padding: clamp(1rem, 3vw, 1.5rem);
 }
 
 .input-section {
-    padding: 20px;
+    padding: clamp(1rem, 3vw, 1.5rem);
     background: var(--secondary-color);
 }
 
 textarea {
     width: 100%;
-    min-height: 150px;
-    padding: 15px;
+    min-height: clamp(8rem, 30vw, 15rem);
+    padding: clamp(0.5rem, 2vw, 1rem);
     border: 1px solid var(--border-color);
-    border-radius: 5px;
-    margin-bottom: 15px;
+    border-radius: clamp(0.3rem, 1vw, 0.5rem);
+    margin-bottom: clamp(0.5rem, 2vw, 1rem);
     resize: vertical;
     font-family: inherit;
+    font-size: clamp(0.9rem, 2vw, 1rem);
 }
 
 .controls {
     display: flex;
-    gap: 10px;
+    gap: clamp(0.5rem, 2vw, 1rem);
+    flex-wrap: wrap;
 }
 
 button {
     background-color: var(--primary-color);
     color: white;
     border: none;
-    padding: 10px 20px;
-    border-radius: 5px;
+    padding: clamp(0.5rem, 1.5vw, 0.8rem) clamp(1rem, 3vw, 1.5rem);
+    border-radius: clamp(0.3rem, 1vw, 0.5rem);
     cursor: pointer;
-    font-size: 14px;
-    transition: background-color 0.2s;
+    font-size: clamp(0.8rem, 2vw, 0.9rem);
+    transition: opacity 0.2s;
+    flex-grow: 1;
 }
 
 button:hover {
     opacity: 0.9;
 }
 
+/* Rubric Container Styles */
 #rubricContainer {
-    padding: 20px;
+    padding: clamp(1rem, 3vw, 1.5rem);
 }
 
 .criteria-card {
-    margin-bottom: 30px;
+    margin-bottom: clamp(1rem, 3vw, 2rem);
     border: 1px solid var(--border-color);
-    border-radius: 5px;
-    overflow: hidden;
+    border-radius: clamp(0.3rem, 1vw, 0.5rem);
 }
 
 .criteria-header {
     background-color: var(--primary-color);
     color: white;
-    padding: 15px;
+    padding: clamp(0.8rem, 2vw, 1.2rem);
     display: flex;
+    flex-wrap: wrap;
     justify-content: space-between;
+    gap: clamp(0.5rem, 2vw, 1rem);
 }
 
 .criteria-title {
     font-weight: bold;
-    font-size: 18px;
+    font-size: clamp(1rem, 3vw, 1.2rem);
+    flex: 1;
+    min-width: min(20rem, 100%);
 }
 
 .criteria-score {
     display: flex;
     align-items: center;
-    gap: 10px;
+    gap: clamp(0.3rem, 1vw, 0.5rem);
 }
 
 .criteria-score input {
-    width: 60px;
-    padding: 5px;
+    width: clamp(3rem, 10vw, 5rem);
+    padding: clamp(0.3rem, 1vw, 0.5rem);
     text-align: center;
     border: none;
-    border-radius: 3px;
+    border-radius: clamp(0.2rem, 0.5vw, 0.3rem);
+    font-size: clamp(0.9rem, 2vw, 1rem);
 }
 
+/* Subcriteria Styles */
 .subcriteria-container {
     display: flex;
-    flex-direction: row;
-    gap: 20px;
-    padding: 20px;
+    gap: clamp(1rem, 3vw, 1.5rem);
+    padding: clamp(1rem, 3vw, 1.5rem);
     overflow-x: auto;
     scrollbar-width: thin;
 }
 
 .subcriteria-container::-webkit-scrollbar {
-    height: 8px;
+    height: clamp(0.3rem, 1vw, 0.5rem);
 }
 
 .subcriteria-container::-webkit-scrollbar-thumb {
     background: var(--primary-color);
-    border-radius: 4px;
+    border-radius: clamp(0.2rem, 0.5vw, 0.3rem);
 }
 
 .subcriteria-card {
-    flex: 1 0 300px;
-    min-width: 0;
-    max-width: 100%;
-    display: flex;
-    flex-direction: column;
+    flex: 1 0 min(100%, 22rem);
     background: white;
-    border-radius: 5px;
+    border-radius: clamp(0.3rem, 1vw, 0.5rem);
     box-shadow: 0 2px 5px rgba(0,0,0,0.1);
-    padding: 15px;
+    padding: clamp(0.8rem, 2vw, 1.2rem);
+    border-left: clamp(0.3rem, 1vw, 0.5rem) solid transparent;
 }
 
-.subcriteria-card:not(:last-child) {
-    border-right: 1px solid var(--border-color);
-    padding-right: 20px;
-}
-
-/* Update the subcriteria header to accommodate the checkbox */
+/* Checkbox Styles */
 .subcriteria-header {
     display: flex;
-    align-items: center; /* Center vertically */
-    margin-bottom: 15px;
-    padding-bottom: 10px;
+    align-items: center;
+    margin-bottom: clamp(0.8rem, 2vw, 1.2rem);
+    padding-bottom: clamp(0.5rem, 1.5vw, 0.8rem);
     border-bottom: 1px solid var(--border-color);
+    gap: clamp(0.5rem, 2vw, 1rem);
+}
+
+.select-all-checkbox {
+    transform: scale(1.5);
+    accent-color: var(--primary-color);
+    cursor: pointer;
+    min-width: clamp(1rem, 3vw, 1.2rem);
+    min-height: clamp(1rem, 3vw, 1.2rem);
 }
 
 .subcriteria-title {
     font-weight: bold;
     color: var(--primary-color);
-    order: 2; /* Title comes after checkbox */
-}
-
-
-
-/* Adjust the title container to include the checkbox */
-.subcriteria-title-container {
-    display: flex;
-    align-items: center;
-}
-
-
-/* Updated Select All checkbox styles */
-.select-all {
-    display: inline-flex;
-    align-items: center;
-    margin-right: 10px; /* Space between checkbox and title */
-}
-
-.select-all input[type="checkbox"] {
-    transform: scale(1.8); /* Larger checkbox */
-    margin-right: 8px; /* Space after checkbox */
-    accent-color: var(--primary-color); /* Use theme color */
-}
-
-.select-all {
-    order: 1; /* Checkbox comes first */
-}
-
-.select-all label {
-    display: none; /* Hide the "Select All" label */
+    flex-grow: 1;
+    font-size: clamp(0.9rem, 2vw, 1rem);
 }
 
 .feedback-list {
     display: flex;
     flex-direction: column;
-    gap: 10px;
+    gap: clamp(0.5rem, 1.5vw, 0.8rem);
 }
 
 .feedback-item {
     display: flex;
-    align-items: flex-start;
-    gap: 10px;
-    padding: 8px;
-    border-radius: 4px;
+    align-items: center;
+    gap: clamp(0.5rem, 1.5vw, 0.8rem);
+    padding: clamp(0.3rem, 1vw, 0.5rem);
 }
 
-.feedback-item input {
+.feedback-item input[type="checkbox"] {
     transform: scale(1.3);
-    margin-top: 3px;
+    accent-color: var(--primary-color);
+    cursor: pointer;
+    min-width: clamp(1rem, 3vw, 1.2rem);
+    min-height: clamp(1rem, 3vw, 1.2rem);
 }
 
-/* Performance level colors */
+/* Performance Level Colors */
 .performance-excellent {
-    background-color: var(--excellent-bg);
-    border-left: 4px solid #2e7d32;
+    background-color: color-mix(in srgb, var(--excellent-bg) 90%, white);
+    border-left-color: #2e7d32;
 }
 
 .performance-good {
-    background-color: var(--good-bg);
-    border-left: 4px solid #1565c0;
+    background-color: color-mix(in srgb, var(--good-bg) 90%, white);
+    border-left-color: #1565c0;
 }
 
 .performance-average {
-    background-color: var(--average-bg);
-    border-left: 4px solid #ff8f00;
+    background-color: color-mix(in srgb, var(--average-bg) 90%, white);
+    border-left-color: #ff8f00;
 }
 
 .performance-poor {
-    background-color: var(--poor-bg);
-    border-left: 4px solid #c62828;
+    background-color: color-mix(in srgb, var(--poor-bg) 90%, white);
+    border-left-color: #c62828;
 }
 
+/* Output Section */
 .output-section {
-    padding: 20px;
+    padding: clamp(1rem, 3vw, 1.5rem);
     background-color: var(--secondary-color);
     border-top: 1px solid var(--border-color);
 }
@@ -247,103 +228,82 @@ button:hover {
 .score-summary {
     display: flex;
     justify-content: space-between;
-    margin-bottom: 15px;
+    margin-bottom: clamp(0.8rem, 2vw, 1.2rem);
     font-weight: bold;
+    font-size: clamp(0.9rem, 2vw, 1rem);
 }
 
 #finalOutput {
     width: 100%;
-    min-height: 200px;
-    padding: 15px;
+    min-height: clamp(8rem, 30vw, 15rem);
+    padding: clamp(0.8rem, 2vw, 1.2rem);
     border: 1px solid var(--border-color);
-    border-radius: 5px;
-    margin-bottom: 15px;
+    border-radius: clamp(0.3rem, 1vw, 0.5rem);
+    margin-bottom: clamp(0.8rem, 2vw, 1.2rem);
     font-family: monospace;
     white-space: pre-wrap;
+    font-size: clamp(0.8rem, 2vw, 0.9rem);
 }
 
 .export-buttons {
     display: flex;
-    gap: 10px;
+    gap: clamp(0.5rem, 2vw, 1rem);
+    flex-wrap: wrap;
 }
 
-/* Responsive Breakpoints */
-@media (max-width: 1440px) {
-    .app-container {
-        width: 98%;
-    }
-    .subcriteria-card {
-        flex-basis: 280px;
-    }
+/* Rubric Selector */
+.rubric-selector {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(min(10rem, 100%), 1fr));
+    gap: clamp(0.5rem, 2vw, 1rem);
+    width: 100%;
+    margin-top: clamp(0.5rem, 2vw, 1rem);
 }
 
-@media (max-width: 1024px) {
-    .app-container {
-        width: 100%;
-        border-radius: 0;
-        margin: 0;
-    }
-    .subcriteria-card {
-        flex-basis: 250px;
-    }
+.rubric-selector select {
+    padding: clamp(0.5rem, 1.5vw, 0.8rem);
+    border-radius: clamp(0.3rem, 1vw, 0.5rem);
+    border: 1px solid var(--border-color);
+    background-color: white;
+    font-family: inherit;
+    width: 100%;
+    font-size: clamp(0.8rem, 2vw, 0.9rem);
 }
 
+/* Responsive adjustments */
 @media (max-width: 768px) {
-    header {
-        padding: 15px;
-    }
-    
-    .input-section {
-        padding: 15px;
-    }
-    
     .subcriteria-container {
         flex-wrap: wrap;
-        overflow-x: visible;
     }
     
     .subcriteria-card {
         flex-basis: 100%;
     }
     
-    .subcriteria-card:not(:last-child) {
-        border-right: none;
-        border-bottom: 1px solid var(--border-color);
-        padding-right: 0;
-        padding-bottom: 20px;
-        margin-bottom: 20px;
-    }
-    
-    .controls {
-        flex-direction: column;
-    }
-    
-    button {
-        width: 100%;
-        margin-bottom: 10px;
-    }
-    
-    .export-buttons {
-        flex-direction: column;
-    }
-}
-
-@media (max-width: 480px) {
-    body {
-        padding: 10px;
-    }
-    
     .criteria-header {
         flex-direction: column;
-        gap: 10px;
+        align-items: stretch;
+    }
+    
+    .criteria-title {
+        min-width: 100%;
     }
     
     .criteria-score {
         justify-content: flex-end;
     }
+}
+
+@media (max-width: 480px) {
+    body {
+        padding: 0.5rem;
+    }
     
-    textarea {
-        min-height: 120px;
-        padding: 10px;
+    .app-container {
+        border-radius: 0;
+    }
+    
+    button, .rubric-selector select {
+        padding-block: 0.8rem;
     }
 }

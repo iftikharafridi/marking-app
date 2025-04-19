@@ -1,0 +1,17 @@
+[
+    {
+        "id": "COM106",
+        "code": "COM106",
+        "name": "Introduction to Databases"
+    },
+    {
+        "id": "COM109",
+        "code": "COM109",
+        "name": "Client Side Development"
+    },
+    {
+        "id": "COM692",
+        "code": "COM692",
+        "name": "Data Analytics"
+    }
+]
