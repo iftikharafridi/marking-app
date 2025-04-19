@@ -1,0 +1,349 @@
+:root {
+    --primary-color: #5D3B8E;
+    --secondary-color: #F0EBF8;
+    --text-dark: #333;
+    --text-light: #fff;
+    --border-color: #ddd;
+    --excellent-bg: #e8f5e9;
+    --good-bg: #e3f2fd;
+    --average-bg: #fff8e1;
+    --poor-bg: #ffebee;
+}
+
+* {
+    box-sizing: border-box;
+    margin: 0;
+    padding: 0;
+}
+
+body {
+    font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+    line-height: 1.6;
+    color: var(--text-dark);
+    background-color: #f5f5f5;
+    padding: 20px;
+    max-width: 100vw;
+    overflow-x: hidden;
+}
+
+.app-container {
+    width: 95%;
+    max-width: 1600px;
+    min-width: 320px;
+    margin: 20px auto;
+    background: white;
+    border-radius: 8px;
+    box-shadow: 0 0 10px rgba(0,0,0,0.1);
+    overflow: hidden;
+    transition: all 0.3s ease;
+}
+
+header {
+    background-color: var(--primary-color);
+    color: var(--text-light);
+    padding: 20px;
+}
+
+.input-section {
+    padding: 20px;
+    background: var(--secondary-color);
+}
+
+textarea {
+    width: 100%;
+    min-height: 150px;
+    padding: 15px;
+    border: 1px solid var(--border-color);
+    border-radius: 5px;
+    margin-bottom: 15px;
+    resize: vertical;
+    font-family: inherit;
+}
+
+.controls {
+    display: flex;
+    gap: 10px;
+}
+
+button {
+    background-color: var(--primary-color);
+    color: white;
+    border: none;
+    padding: 10px 20px;
+    border-radius: 5px;
+    cursor: pointer;
+    font-size: 14px;
+    transition: background-color 0.2s;
+}
+
+button:hover {
+    opacity: 0.9;
+}
+
+#rubricContainer {
+    padding: 20px;
+}
+
+.criteria-card {
+    margin-bottom: 30px;
+    border: 1px solid var(--border-color);
+    border-radius: 5px;
+    overflow: hidden;
+}
+
+.criteria-header {
+    background-color: var(--primary-color);
+    color: white;
+    padding: 15px;
+    display: flex;
+    justify-content: space-between;
+}
+
+.criteria-title {
+    font-weight: bold;
+    font-size: 18px;
+}
+
+.criteria-score {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+}
+
+.criteria-score input {
+    width: 60px;
+    padding: 5px;
+    text-align: center;
+    border: none;
+    border-radius: 3px;
+}
+
+.subcriteria-container {
+    display: flex;
+    flex-direction: row;
+    gap: 20px;
+    padding: 20px;
+    overflow-x: auto;
+    scrollbar-width: thin;
+}
+
+.subcriteria-container::-webkit-scrollbar {
+    height: 8px;
+}
+
+.subcriteria-container::-webkit-scrollbar-thumb {
+    background: var(--primary-color);
+    border-radius: 4px;
+}
+
+.subcriteria-card {
+    flex: 1 0 300px;
+    min-width: 0;
+    max-width: 100%;
+    display: flex;
+    flex-direction: column;
+    background: white;
+    border-radius: 5px;
+    box-shadow: 0 2px 5px rgba(0,0,0,0.1);
+    padding: 15px;
+}
+
+.subcriteria-card:not(:last-child) {
+    border-right: 1px solid var(--border-color);
+    padding-right: 20px;
+}
+
+/* Update the subcriteria header to accommodate the checkbox */
+.subcriteria-header {
+    display: flex;
+    align-items: center; /* Center vertically */
+    margin-bottom: 15px;
+    padding-bottom: 10px;
+    border-bottom: 1px solid var(--border-color);
+}
+
+.subcriteria-title {
+    font-weight: bold;
+    color: var(--primary-color);
+    order: 2; /* Title comes after checkbox */
+}
+
+
+
+/* Adjust the title container to include the checkbox */
+.subcriteria-title-container {
+    display: flex;
+    align-items: center;
+}
+
+
+/* Updated Select All checkbox styles */
+.select-all {
+    display: inline-flex;
+    align-items: center;
+    margin-right: 10px; /* Space between checkbox and title */
+}
+
+.select-all input[type="checkbox"] {
+    transform: scale(1.8); /* Larger checkbox */
+    margin-right: 8px; /* Space after checkbox */
+    accent-color: var(--primary-color); /* Use theme color */
+}
+
+.select-all {
+    order: 1; /* Checkbox comes first */
+}
+
+.select-all label {
+    display: none; /* Hide the "Select All" label */
+}
+
+.feedback-list {
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+}
+
+.feedback-item {
+    display: flex;
+    align-items: flex-start;
+    gap: 10px;
+    padding: 8px;
+    border-radius: 4px;
+}
+
+.feedback-item input {
+    transform: scale(1.3);
+    margin-top: 3px;
+}
+
+/* Performance level colors */
+.performance-excellent {
+    background-color: var(--excellent-bg);
+    border-left: 4px solid #2e7d32;
+}
+
+.performance-good {
+    background-color: var(--good-bg);
+    border-left: 4px solid #1565c0;
+}
+
+.performance-average {
+    background-color: var(--average-bg);
+    border-left: 4px solid #ff8f00;
+}
+
+.performance-poor {
+    background-color: var(--poor-bg);
+    border-left: 4px solid #c62828;
+}
+
+.output-section {
+    padding: 20px;
+    background-color: var(--secondary-color);
+    border-top: 1px solid var(--border-color);
+}
+
+.score-summary {
+    display: flex;
+    justify-content: space-between;
+    margin-bottom: 15px;
+    font-weight: bold;
+}
+
+#finalOutput {
+    width: 100%;
+    min-height: 200px;
+    padding: 15px;
+    border: 1px solid var(--border-color);
+    border-radius: 5px;
+    margin-bottom: 15px;
+    font-family: monospace;
+    white-space: pre-wrap;
+}
+
+.export-buttons {
+    display: flex;
+    gap: 10px;
+}
+
+/* Responsive Breakpoints */
+@media (max-width: 1440px) {
+    .app-container {
+        width: 98%;
+    }
+    .subcriteria-card {
+        flex-basis: 280px;
+    }
+}
+
+@media (max-width: 1024px) {
+    .app-container {
+        width: 100%;
+        border-radius: 0;
+        margin: 0;
+    }
+    .subcriteria-card {
+        flex-basis: 250px;
+    }
+}
+
+@media (max-width: 768px) {
+    header {
+        padding: 15px;
+    }
+    
+    .input-section {
+        padding: 15px;
+    }
+    
+    .subcriteria-container {
+        flex-wrap: wrap;
+        overflow-x: visible;
+    }
+    
+    .subcriteria-card {
+        flex-basis: 100%;
+    }
+    
+    .subcriteria-card:not(:last-child) {
+        border-right: none;
+        border-bottom: 1px solid var(--border-color);
+        padding-right: 0;
+        padding-bottom: 20px;
+        margin-bottom: 20px;
+    }
+    
+    .controls {
+        flex-direction: column;
+    }
+    
+    button {
+        width: 100%;
+        margin-bottom: 10px;
+    }
+    
+    .export-buttons {
+        flex-direction: column;
+    }
+}
+
+@media (max-width: 480px) {
+    body {
+        padding: 10px;
+    }
+    
+    .criteria-header {
+        flex-direction: column;
+        gap: 10px;
+    }
+    
+    .criteria-score {
+        justify-content: flex-end;
+    }
+    
+    textarea {
+        min-height: 120px;
+        padding: 10px;
+    }
+}

@@ -1,0 +1,47 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Rubric Assessment Tool</title>
+    <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+    <div class="app-container">
+        <header>
+            <h1>Rubric Assessment Tool</h1>
+            <div class="input-section">
+                <textarea id="rubricInput" placeholder="Paste your rubric markdown here..."></textarea>
+                <div class="controls">
+                    <input type="file" id="fileUpload" accept=".md">
+                    <button id="loadBtn">Load Rubric</button>
+                </div>
+            </div>
+        </header>
+
+        <main id="rubricContainer">
+            <!-- Criteria will be rendered here -->
+        </main>
+
+        <section class="output-section">
+            <h2>Feedback Summary</h2>
+            <div class="score-summary">
+                <span>Total Score: <span id="totalScore">0</span>/<span id="maxScore">100</span></span>
+                <span>Percentage: <span id="percentage">0</span>%</span>
+            </div>
+            <textarea id="finalOutput" readonly></textarea>
+            <div class="export-buttons">
+                <button id="copyBtn">Copy Feedback</button>
+                <button id="copyBbBtn">Copy for Blackboard</button>
+                <button id="docxBtn">Export as DOCX</button>
+                <button id="xmlBtn">Generate Moodle XML</button>
+            </div>
+        </section>
+    </div>
+    <div id="bbHiddenCopy" contenteditable="true" style="position: absolute; left: -9999px; white-space: pre-wrap;"></div>
+
+    <script src="https://cdn.jsdelivr.net/npm/docx@7.8.2/build/index.js"></script>
+    <script src="./lib/docx-library.js"></script>
+    <script src="script.js"></script>
+</body>
+</html>
