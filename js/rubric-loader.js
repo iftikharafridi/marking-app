@@ -1,6 +1,6 @@
 class RubricLoader {
     constructor() {
-        this.basePath = 'sample_rubrics';
+        this.basePath = 'rubrics';
         this.initEventListeners();
         this.loadUniversities();
     }
@@ -166,20 +166,20 @@ class RubricLoader {
 //         console.log("Checking available rubric files...");
         
 //         // Check university level
-//         const univResponse = await fetch('sample_rubrics/Ulster/');
+//         const univResponse = await fetch('rubrics/Ulster/');
 //         console.log('University level:', univResponse.ok ? 'Exists' : 'Missing');
         
 //         // Check program level
-//         const programResponse = await fetch('sample_rubrics/Ulster/MSc_Computer_Science/');
+//         const programResponse = await fetch('rubrics/Ulster/MSc_Computer_Science/');
 //         console.log('Program level:', programResponse.ok ? 'Exists' : 'Missing');
         
 //         // Check module level
-//         const moduleResponse = await fetch('sample_rubrics/Ulster/MSc_Computer_Science/COM747/');
+//         const moduleResponse = await fetch('rubrics/Ulster/MSc_Computer_Science/COM747/');
 //         console.log('Module level:', moduleResponse.ok ? 'Exists' : 'Missing');
         
 //         // Try to get directory listing (may not work on all servers)
 //         try {
-//             const filesResponse = await fetch('sample_rubrics/Ulster/MSc_Computer_Science/COM747/');
+//             const filesResponse = await fetch('rubrics/Ulster/MSc_Computer_Science/COM747/');
 //             if (filesResponse.ok) {
 //                 const files = await filesResponse.text();
 //                 console.log('Directory contents:', files);
@@ -190,11 +190,11 @@ class RubricLoader {
         
 //         // Check specific files
 //         const filesToCheck = [
-//             'sample_rubrics/Ulster/index.json',
-//             'sample_rubrics/Ulster/MSc_Computer_Science/index.json',
-//             'sample_rubrics/Ulster/MSc_Computer_Science/COM747/index.json',
-//             'sample_rubrics/Ulster/MSc_Computer_Science/COM747/CW1_Rubric.md',
-//             'sample_rubrics/Ulster/MSc_Computer_Science/COM747/CW2_Rubric.md'
+//             'rubrics/Ulster/index.json',
+//             'rubrics/Ulster/MSc_Computer_Science/index.json',
+//             'rubrics/Ulster/MSc_Computer_Science/COM747/index.json',
+//             'rubrics/Ulster/MSc_Computer_Science/COM747/CW1_Rubric.md',
+//             'rubrics/Ulster/MSc_Computer_Science/COM747/CW2_Rubric.md'
 //         ];
         
 //         for (const file of filesToCheck) {
