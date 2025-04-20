@@ -129,9 +129,13 @@ class RubricLoader {
             const moduleId = document.getElementById('moduleSelect')?.value;
             
             if (!univId || !programId || !moduleId) return;
-    
+            
+            // Remove the .md extension from file name, else github wont be able to access the file
+            const cleanFilename = filename.replace(/\.md$/i, ''); // remove .md if present
+            const rubricPath = `${this.basePath}/${univId}/${programId}/${moduleId}/${cleanFilename}`;
+
             //const rubricPath = `${this.basePath}/${univId}/${programId}/${moduleId}/${filename}`;
-            const rubricPath = `./CW2_Rubric.md`
+            //const rubricPath = `./CW2_Rubric`
             const response = await fetch(rubricPath);
             console.log('Fetching rubric from:', rubricPath); // Debug log
             
