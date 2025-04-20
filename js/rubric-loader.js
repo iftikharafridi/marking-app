@@ -131,7 +131,8 @@ class RubricLoader {
             if (!univId || !programId || !moduleId) return;
             
             // Remove the .md extension from file name, else github wont be able to access the file
-            const cleanFilename = filename.replace(/\.md$/i, ''); // remove .md if present
+            const isGitHubPages = location.hostname.includes('github.io');
+            const cleanFilename = isGitHubPages ? filename.replace(/\.md$/i, '') : filename;        
             const rubricPath = `${this.basePath}/${univId}/${programId}/${moduleId}/${cleanFilename}`;
 
             //const rubricPath = `${this.basePath}/${univId}/${programId}/${moduleId}/${filename}`;
@@ -146,6 +147,7 @@ class RubricLoader {
             }
             
             const rubricText = await response.text();
+            console.log(rubricText)
             document.getElementById('rubricInput').value = rubricText;
             
             if (typeof window.loadRubric === 'function') {
