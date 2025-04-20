@@ -132,6 +132,7 @@ class RubricLoader {
     
             const rubricPath = `${this.basePath}/${univId}/${programId}/${moduleId}/${filename}`;
             const response = await fetch(rubricPath);
+            console.log('Fetching rubric from:', rubricPath); // Debug log
             
             if (!response.ok) {
                 console.warn(`Rubric file not found: ${rubricPath}`);
