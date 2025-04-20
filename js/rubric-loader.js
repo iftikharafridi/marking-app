@@ -147,7 +147,7 @@ class RubricLoader {
             }
             
             const rubricText = await response.text();
-            console.log(rubricText)
+            //console.log(rubricText)
             document.getElementById('rubricInput').value = rubricText;
             
             if (typeof window.loadRubric === 'function') {
