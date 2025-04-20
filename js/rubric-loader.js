@@ -130,7 +130,8 @@ class RubricLoader {
             
             if (!univId || !programId || !moduleId) return;
     
-            const rubricPath = `${this.basePath}/${univId}/${programId}/${moduleId}/${filename}`;
+            //const rubricPath = `${this.basePath}/${univId}/${programId}/${moduleId}/${filename}`;
+            const rubricPath = `./CW2_Rubric.md`
             const response = await fetch(rubricPath);
             console.log('Fetching rubric from:', rubricPath); // Debug log
             
