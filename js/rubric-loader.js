@@ -131,11 +131,11 @@ class RubricLoader {
             if (!univId || !programId || !moduleId) return;
             
             // Remove the .md extension from file name, else github wont be able to access the file
-            const isGitHubPages = location.hostname.includes('github.io');
-            const cleanFilename = isGitHubPages ? filename.replace(/\.md$/i, '') : filename;        
-            const rubricPath = `${this.basePath}/${univId}/${programId}/${moduleId}/${cleanFilename}`;
+            //const isGitHubPages = location.hostname.includes('github.io');
+            //const cleanFilename = isGitHubPages ? filename.replace(/\.md$/i, '') : filename;        
+            //const rubricPath = `${this.basePath}/${univId}/${programId}/${moduleId}/${cleanFilename}`;
 
-            //const rubricPath = `${this.basePath}/${univId}/${programId}/${moduleId}/${filename}`;
+            const rubricPath = `${this.basePath}/${univId}/${programId}/${moduleId}/${filename}`;
             //const rubricPath = `./CW2_Rubric`
             const response = await fetch(rubricPath);
             console.log('Fetching rubric from:', rubricPath); // Debug log
