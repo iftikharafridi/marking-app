@@ -12,89 +12,92 @@
 
 <body class="bg-gray-50 text-gray-900 min-h-screen">
     <main class="max-w-[95rem] mx-auto p-1 space-y-2 bg-gray-100 text-[11px]">
-        <!-- Rubric Upload + Metadata -->
-        <section class="bg-white shadow-sm rounded border border-gray-600 p-2">
-          <h2 class="text-lg font-semibold mb-2">Rubric Upload</h2>
-          <textarea id="rubricInput" placeholder="Paste your rubric markdown here..." class="w-full border rounded-md p-2 mb-4"></textarea>
-          <div class="flex items-center gap-3 mb-6">
-            <input type="file" id="fileUpload" accept=".md" class="border p-1">
-            <button id="loadBtn" class="bg-blue-600 text-white px-1.5 py-0.5 rounded text-[10px]">Load Rubric</button>
-          </div>
-          <h3 class="text-md font-semibold mb-2">Or choose from predefined rubrics</h3>
-          <div class="grid grid-cols-2 md:grid-cols-4 gap-4">
-            <select id="universitySelect" disabled class="border p-2 rounded">
-              <option value="">Select University</option>
-            </select>
-            <select id="programSelect" disabled class="border p-2 rounded">
-              <option value="">Select Program</option>
-            </select>
-            <select id="moduleSelect" disabled class="border p-2 rounded">
-              <option value="">Select Module</option>
-            </select>
-            <select id="componentSelect" disabled class="border p-2 rounded">
-              <option value="">Select Component</option>
-            </select>
-          </div>
-        </section>
-      
-        <!-- Student Selection -->
-        <section class="bg-white shadow-sm rounded-md border border-gray-600 p-3">
-          <h2 class="text-lg font-semibold mb-4">Student Selection</h2>
-          <div class="grid md:grid-cols-3 gap-6">
-            <div>
-              <label for="studentFileUpload" class="block mb-1 font-medium text-sm">Upload Student List</label>
-              <input type="file" id="studentFileUpload" accept=".xlsx,.xls,.csv" class="border p-2 rounded w-full">
-              <button id="loadStudentsBtn" class="mt-2 w-full bg-blue-600 text-white px-4 py-2 rounded">Load Student List</button>
-            </div>
-            <div>
-              <label for="studentSelect" class="block mb-1 font-medium text-sm">Select Student</label>
-              <select id="studentSelect" disabled class="border p-2 rounded w-full">
-                <option value="">Select Student</option>
-              </select>
-              <div class="flex justify-between mt-2">
-                <button id="prevStudent" class="bg-gray-300 px-1.5 py-0.5 rounded text-[10px]">← Prev</button>
-                <button id="nextStudent" class="bg-gray-300 px-2 py-1 rounded text-[10px]">Next →</button>
-              </div>
-            </div>
-            <div class="flex flex-col justify-between">
-              <p id="progressIndicator" class="text-sm font-semibold text-purple-700 bg-purple-100 px-3 py-2 rounded text-center">Marked: 0/0 students</p>
-            </div>
-          </div>
-          <div class="flex flex-col md:flex-row gap-4 mt-6">
-            <button id="saveStudentsBtn" class="bg-green-600 text-white px-1.5 py-0.5 rounded text-[10px] w-full md:w-auto">Save to Excel</button>
-            <button id="exportStudentsBtn" disabled class="bg-indigo-600 text-white px-1.5 py-0.5 rounded text-[10px] w-full md:w-auto">Export Marks</button>
-          </div>
-        </section>
-      
-        <!-- Assessment Criteria -->
-        <section class="bg-white shadow-sm rounded border border-gray-600 p-2">
-          <h2 class="text-xl font-bold mb-2">Assessment Criteria</h2>
-          <p class="text-sm text-gray-500 mb-3">Use this section to evaluate each criterion based on the rubric.</p>
-          <details open class="border border-gray-600 rounded-md">
-            <summary class="bg-gray-100 px-4 py-2 cursor-pointer font-medium">Rubric Details</summary>
-            <div id="rubricContainer" class="p-2 space-y-4 text-sm">
-              <!-- Each criterion will be a block; subcriteria inside will align in a row -->
-            </div>
-          </details>
-        </section>
-      
-        <!-- Feedback Summary -->
-        <section class="bg-gray-50 shadow-md rounded-lg border border-gray-600 p-6">
-          <h2 class="text-lg font-semibold mb-2">Feedback Summary</h2>
-          <div class="flex flex-col md:flex-row md:justify-between md:items-center mb-3">
-            <span>Total Score: <span id="totalScore">0</span>/<span id="maxScore">100</span></span>
-            <span>Percentage: <span id="percentage">0</span>%</span>
-          </div>
-          <textarea id="finalOutput" readonly class="w-full border border-gray-600 p-2 rounded mb-3"></textarea>
-          <div class="flex flex-wrap gap-2">
-            <button id="copyBtn" class="bg-blue-600 text-white px-4 py-2 rounded">Copy Feedback</button>
-            <button id="copyBbBtn" class="bg-yellow-500 text-white px-1.5 py-0.5 rounded text-[10px]">Copy for Blackboard</button>
-            <button id="docxBtn" class="bg-purple-600 text-white px-1.5 py-0.5 rounded text-[10px]">Export as DOCX</button>
-            <button id="xmlBtn" class="bg-gray-800 text-white px-1.5 py-0.5 rounded text-[10px]">Generate Moodle XML</button>
-          </div>
-        </section>
-      </main>
-      
+  <!-- Rubric Upload + Metadata -->
+  <section class="bg-white shadow-sm rounded border border-gray-600 p-2">
+    <h2 class="text-lg font-semibold mb-2">Rubric Upload</h2>
+    <textarea id="rubricInput" placeholder="Paste your rubric markdown here..." class="w-full border rounded-md p-2 mb-4"></textarea>
+    <div class="mb-4">
+  <label for="fileUpload" class="block mb-1 font-medium text-sm">Upload Rubric Markdown File</label>
+  <div class="flex flex-col md:flex-row gap-3 items-start">
+    <input type="file" id="fileUpload" accept=".md" class="border p-2 rounded w-full md:w-auto">
+    <button id="loadBtn" class="bg-blue-600 text-white px-4 py-2 rounded text-sm">Load Rubric</button>
+  </div>
+</div>
+    <h3 class="text-md font-semibold mb-2">Or choose from predefined rubrics</h3>
+    <div class="grid grid-cols-2 md:grid-cols-4 gap-4">
+      <select id="universitySelect" disabled class="border p-2 rounded">
+        <option value="">Select University</option>
+      </select>
+      <select id="programSelect" disabled class="border p-2 rounded">
+        <option value="">Select Program</option>
+      </select>
+      <select id="moduleSelect" disabled class="border p-2 rounded">
+        <option value="">Select Module</option>
+      </select>
+      <select id="componentSelect" disabled class="border p-2 rounded">
+        <option value="">Select Component</option>
+      </select>
+    </div>
+  </section>
+
+  <!-- Student Selection -->
+  <section class="bg-white shadow-sm rounded-md border border-gray-600 p-3">
+    <h2 class="text-lg font-semibold mb-4">Student Selection</h2>
+    <div class="grid md:grid-cols-3 gap-6">
+      <div>
+        <label for="studentFileUpload" class="block mb-1 font-medium text-sm">Upload Student List</label>
+        <input type="file" id="studentFileUpload" accept=".xlsx,.xls,.csv" class="border p-2 rounded w-full">
+        <button id="loadStudentsBtn" class="mt-2 w-full bg-blue-600 text-white px-4 py-2 rounded">Load Student List</button>
+      </div>
+      <div>
+        <label for="studentSelect" class="block mb-1 font-medium text-sm">Select Student</label>
+        <select id="studentSelect" disabled class="border p-2 rounded w-full">
+          <option value="">Select Student</option>
+        </select>
+        <div class="flex justify-between mt-2">
+          <button id="prevStudent" class="bg-gray-300 px-1.5 py-0.5 rounded text-[10px]">← Prev</button>
+          <button id="nextStudent" class="bg-gray-300 px-2 py-1 rounded text-[10px]">Next →</button>
+        </div>
+      </div>
+      <div class="flex flex-col justify-between">
+        <p id="progressIndicator" class="text-sm font-semibold text-purple-700 bg-purple-100 px-3 py-2 rounded text-center">Marked: 0/0 students</p>
+      </div>
+    </div>
+    <div class="flex flex-col md:flex-row gap-4 mt-6">
+      <button id="saveStudentsBtn" class="bg-green-600 text-white px-1.5 py-0.5 rounded text-[10px] w-full md:w-auto">Save to Excel</button>
+      <button id="exportStudentsBtn" disabled class="bg-indigo-600 text-white px-1.5 py-0.5 rounded text-[10px] w-full md:w-auto">Export Marks</button>
+    </div>
+  </section>
+
+  <!-- Assessment Criteria -->
+  <section class="bg-white shadow-sm rounded border border-gray-600 p-2">
+    <h2 class="text-xl font-bold mb-2">Assessment Criteria</h2>
+    <p class="text-sm text-gray-500 mb-3">Use this section to evaluate each criterion based on the rubric.</p>
+    <details open class="border border-gray-600 rounded-md">
+      <summary class="bg-gray-100 px-4 py-2 cursor-pointer font-medium">Rubric Details</summary>
+      <div id="rubricContainer" class="p-2 space-y-4 text-sm">
+        <!-- Each criterion will be a block; subcriteria inside will align in a row -->
+      </div>
+    </details>
+  </section>
+
+  <!-- Feedback Summary -->
+  <section class="bg-gray-50 shadow-md rounded-lg border border-gray-600 p-6">
+    <h2 class="text-lg font-semibold mb-2">Feedback Summary</h2>
+    <div class="flex flex-col md:flex-row md:justify-between md:items-center mb-3">
+      <span>Total Score: <span id="totalScore">0</span>/<span id="maxScore">100</span></span>
+      <span>Percentage: <span id="percentage">0</span>%</span>
+    </div>
+    <textarea id="finalOutput" readonly class="w-full border border-gray-600 p-2 rounded mb-3"></textarea>
+    <div class="flex flex-wrap gap-2">
+      <button id="copyBtn" class="bg-blue-600 text-white px-4 py-2 rounded">Copy Feedback</button>
+      <button id="copyBbBtn" class="bg-yellow-500 text-white px-1.5 py-0.5 rounded text-[10px]">Copy for Blackboard</button>
+      <button id="docxBtn" class="bg-purple-600 text-white px-1.5 py-0.5 rounded text-[10px]">Export as DOCX</button>
+      <button id="xmlBtn" class="bg-gray-800 text-white px-1.5 py-0.5 rounded text-[10px]">Generate Moodle XML</button>
+    </div>
+  </section>
+</main>
+
     <div id="bbHiddenCopy" contenteditable="true" style="position: absolute; left: -9999px; white-space: pre-wrap;">
     </div>
     <script src="https://cdn.jsdelivr.net/npm/docx@7.8.2/build/index.js"></script>

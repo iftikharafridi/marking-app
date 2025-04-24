@@ -330,7 +330,7 @@ document.addEventListener('DOMContentLoaded', () => {
                     <div class="criteria-score">
                         ${criterion.maxScore > 0 ? `
                             <input type="number" min="0" max="${criterion.maxScore}" 
-                                   value="0" class="score-input">
+                                   value="0" class="score-input w-20 px-2 py-1 border border-gray-400 rounded text-gray-900 bg-white text-[11px]">
                             <span>/ ${criterion.maxScore}</span>
                         ` : ''}
                     </div>
