@@ -8,7 +8,7 @@
 
     const { Document, Paragraph, TextRun, Packer, HeadingLevel } = core;
 
-    async function exportToDocx(text) {
+    async function exportToDocx(text, filename) {
         try {
             const paragraphs = [];
             const lines = text.split('\n');
@@ -69,7 +69,8 @@
             const url = URL.createObjectURL(blob);
             const a = document.createElement('a');
             a.href = url;
-            a.download = 'feedback.docx';
+            //a.download = 'feedback.docx';
+            a.download = filename;
             document.body.appendChild(a);
             a.click();
             document.body.removeChild(a);

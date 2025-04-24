@@ -843,7 +843,26 @@ document.addEventListener('DOMContentLoaded', () => {
             elements.docxBtn.disabled = true;
             elements.docxBtn.textContent = 'Generating...';
 
-            await window.docxUtils.exportToDocx(elements.finalOutput.value);
+            //const studentSelect = document.getElementById('studentSelect');
+            const selectedOption = studentSelect?.options[studentSelect.selectedIndex];
+
+            const fullText = selectedOption?.text?.trim() || "";
+
+            let studentID = "Anonymous";
+            let studentName = "Unknown";
+
+            // Check for placeholder or valid student info
+            if (fullText && fullText !== "Select Student" && fullText.includes(" - ")) {
+                [studentID, studentName] = fullText.split(" - ", 2);
+            }
+
+            const filename = `${studentID} - ${studentName} - Feedback.docx`;
+
+
+            console.log(filename);
+
+            //await window.docxUtils.exportToDocx(elements.finalOutput.value);
+            await window.docxUtils.exportToDocx(elements.finalOutput.value, filename);
 
             // Restore button state
             elements.docxBtn.disabled = false;
