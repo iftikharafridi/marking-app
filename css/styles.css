@@ -155,6 +155,7 @@ button:focus-visible {
     display: flex;
     gap: clamp(1rem, 3vw, 1.5rem);
     padding: clamp(1rem, 3vw, 1.5rem);
+    flex-wrap: nowrap; /* ✅ ADD THIS */
     overflow-x: auto;
     scrollbar-width: thin;
 }
@@ -177,6 +178,10 @@ button:focus-visible {
     padding: var(--spacing-sm);
     border-left: 0.4rem solid transparent;
     transition: transform 0.2s ease, box-shadow 0.2s ease;
+    width: 100%;
+  min-width: 0;
+  max-width: 100%;
+  box-sizing: border-box;
 }
 
 .subcriteria-card:hover {
@@ -521,3 +526,63 @@ input[type="file"]::file-selector-button:hover {
     font-family: inherit;
     font-size: 14px;
 }
+
+html, body {
+    margin: 0;
+    padding: 0;
+    height: 100%;
+    font-family: Arial, sans-serif;
+    overflow-x: hidden;
+  }
+  
+  main.form-layout {
+    display: flex;
+    flex-direction: column;
+    gap: 2rem;
+    padding: 2rem;
+    max-width: 1200px;
+    margin: 0 auto;
+  }
+  
+  .form-section {
+    background: #fff;
+    border-radius: 8px;
+    padding: 1rem;
+    box-shadow: 0 1px 5px rgba(0,0,0,0.1);
+  }
+  
+  fieldset {
+    border: 1px solid #ccc;
+    border-radius: 6px;
+    padding: 1rem;
+  }
+  
+  legend {
+    font-weight: bold;
+    font-size: 1.1rem;
+    color: #333;
+  }
+  
+  textarea {
+    width: 100%;
+    min-height: 100px;
+    padding: 0.5rem;
+    margin-top: 0.5rem;
+    resize: vertical;
+  }
+  
+  .sticky-footer {
+    position: relative;
+    bottom: 0;
+    z-index: 10;
+    background-color: #fff;
+    border-top: 1px solid #ccc;
+    box-shadow: 0 -2px 5px rgba(0, 0, 0, 0.05);
+  }
+  
+  .export-buttons {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.5rem;
+    margin-top: 1rem;
+  }
