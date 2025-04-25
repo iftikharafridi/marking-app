@@ -8,5 +8,10 @@
         "id": "COM745",
         "code": "COM745",
         "name": "Big Data and Infrastructure"
+    },
+    {
+        "id": "COM769",
+        "code": "COM769",
+        "name": "Scalable Advanced Software Systems"
     }
 ]
