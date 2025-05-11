@@ -10,6 +10,11 @@
         "name": "Client Side Development"
     },
     {
+        "id": "COM682",
+        "code": "COM682",
+        "name": "Cloud Native Development"
+    },
+    {
         "id": "COM692",
         "code": "COM692",
         "name": "Data Analytics"
