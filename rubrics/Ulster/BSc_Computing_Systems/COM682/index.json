@@ -1,5 +1,10 @@
 [
     {
+        "id": "CW2P1",
+        "name": "Coursework 2 Part 1",
+        "file": "CW2P1_Rubric.md"
+    },
+    {
         "id": "CW2P2",
         "name": "Coursework 2 Part 2",
         "file": "CW2P2_Rubric.md"
