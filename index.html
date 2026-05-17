@@ -4,106 +4,853 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Rubric Assessment Tool</title>
+    <title>Marking &amp; Feedback App</title>
     <link rel="stylesheet" href="./css/styles.css">
     <script src="https://cdn.tailwindcss.com"></script>
-    <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/xlsx-js-style@1.2.0/dist/xlsx.bundle.js"></script>
 </head>
 
-<body class="bg-gray-50 text-gray-900 min-h-screen">
-    <main class="max-w-[95rem] mx-auto p-1 space-y-2 bg-gray-100 text-[11px]">
-  <!-- Rubric Upload + Metadata -->
-  <section class="bg-white shadow-sm rounded border border-gray-600 p-2">
-    <h2 class="text-lg font-semibold mb-2">Rubric Upload</h2>
-    <textarea id="rubricInput" placeholder="Paste your rubric markdown here..." class="w-full border rounded-md p-2 mb-4"></textarea>
-    <div class="mb-4">
-  <label for="fileUpload" class="block mb-1 font-medium text-sm">Upload Rubric Markdown File</label>
-  <div class="flex flex-col md:flex-row gap-3 items-start">
-    <input type="file" id="fileUpload" accept=".md" class="border p-2 rounded w-full md:w-auto">
-    <button id="loadBtn" class="bg-blue-600 text-white px-4 py-2 rounded text-sm">Load Rubric</button>
-  </div>
-</div>
-    <h3 class="text-md font-semibold mb-2">Or choose from predefined rubrics</h3>
-    <div class="grid grid-cols-2 md:grid-cols-4 gap-4">
-      <select id="universitySelect" disabled class="border p-2 rounded">
-        <option value="">Select University</option>
-      </select>
-      <select id="programSelect" disabled class="border p-2 rounded">
-        <option value="">Select Program</option>
-      </select>
-      <select id="moduleSelect" disabled class="border p-2 rounded">
-        <option value="">Select Module</option>
-      </select>
-      <select id="componentSelect" disabled class="border p-2 rounded">
-        <option value="">Select Component</option>
-      </select>
-    </div>
-  </section>
+<body class="app-shell text-[11px]">
 
-  <!-- Student Selection -->
-  <section class="bg-white shadow-sm rounded-md border border-gray-600 p-3">
-    <h2 class="text-lg font-semibold mb-4">Student Selection</h2>
-    <div class="grid md:grid-cols-3 gap-6">
-      <div>
-        <label for="studentFileUpload" class="block mb-1 font-medium text-sm">Upload Student List</label>
-        <input type="file" id="studentFileUpload" accept=".xlsx,.xls,.csv" class="border p-2 rounded w-full">
-        <button id="loadStudentsBtn" class="mt-2 w-full bg-blue-600 text-white px-4 py-2 rounded">Load Student List</button>
-      </div>
-      <div>
-        <label for="studentSelect" class="block mb-1 font-medium text-sm">Select Student</label>
-        <select id="studentSelect" disabled class="border p-2 rounded w-full">
-          <option value="">Select Student</option>
-        </select>
-        <div class="flex justify-between mt-2">
-          <button id="prevStudent" class="bg-gray-300 px-1.5 py-0.5 rounded text-[10px]">← Prev</button>
-          <button id="nextStudent" class="bg-gray-300 px-2 py-1 rounded text-[10px]">Next →</button>
+<!-- Session restore banner -->
+<div id="sessionRestoreBanner" class="session-banner" style="display:none;">
+  <span class="session-banner-icon">💾</span>
+  <span class="session-banner-text">Previous session found: <strong id="sessionRestoreInfo"></strong></span>
+  <button id="sessionRestoreBtn" class="btn-action" style="flex-shrink:0;">Restore Session</button>
+  <button id="sessionDismissBtn" class="btn-nav"    style="flex-shrink:0;">Dismiss</button>
+</div>
+
+<div class="app-layout">
+
+  <!-- ═══════════════════════════════════════════════════════
+       LEFT SIDEBAR
+  ═══════════════════════════════════════════════════════ -->
+  <aside class="left-sidebar">
+
+    <!-- ══ UPPER: Setup (scrollable when expanded) ══ -->
+    <div class="sidebar-upper">
+      <details class="sb-section" id="setupDetails" open>
+        <summary class="sb-summary">
+          <span class="sb-summary-icon">⚙</span>
+          <span class="sb-summary-title">Setup</span>
+          <span class="sb-chips">
+            <span id="rubricStatusChip"  class="status-chip chip-default">No rubric</span>
+            <span id="studentStatusChip" class="status-chip chip-default">No students</span>
+          </span>
+          <span class="sb-chevron">▾</span>
+        </summary>
+        <div class="sb-body">
+          <div class="sb-sub-label">Rubric</div>
+          <textarea id="rubricInput" class="setup-textarea font-mono"
+            placeholder="Paste rubric markdown here…"></textarea>
+          <input type="file" id="fileUpload" accept=".md" class="sb-file-input">
+          <button id="loadBtn" class="btn-action w-full mt-1">⬆ Load Rubric</button>
+
+          <div class="sb-sub-label mt-2">First Marker Name</div>
+          <p class="sb-hint">Type your name — it will appear in the generated feedback.</p>
+          <input id="markerName" type="text" class="setup-select"
+            placeholder="Enter your name…"
+            style="padding:4px 6px; font-size:10px;">
+
+          <div class="sb-sub-label mt-2">Programme Level</div>
+          <select id="programmeLevelSelect" class="setup-select">
+            <option value="msc">MSc — Pass at 50%</option>
+            <option value="bsc">BSc — Pass at 40%</option>
+            <option value="custom">Custom pass mark…</option>
+          </select>
+          <div id="customPassMarkRow" style="display:none; align-items:center; gap:4px; margin-top:4px;">
+            <input id="customPassMark" type="number" min="1" max="100" value="50"
+              class="setup-select" style="padding:4px 6px; font-size:10px; width:60px;">
+            <span style="font-size:9px; color:#6b7280;">% pass threshold</span>
+          </div>
+
+          <div class="sb-or">— or choose predefined —</div>
+          <select id="universitySelect" disabled class="setup-select"><option value="">University</option></select>
+          <select id="programSelect"   disabled class="setup-select mt-1"><option value="">Program</option></select>
+          <select id="moduleSelect"    disabled class="setup-select mt-1"><option value="">Module</option></select>
+          <select id="componentSelect" disabled class="setup-select mt-1"><option value="">Component</option></select>
+
+          <div class="sb-sub-label mt-3">Student List</div>
+          <p class="sb-hint">Excel/CSV · columns: <strong>Student ID</strong>, <strong>Name</strong></p>
+          <input type="file" id="studentFileUpload" accept=".xlsx,.xls,.csv" style="display:none">
+          <button id="loadStudentsBtn" class="btn-action w-full mt-1">📥 Import Students</button>
+        </div>
+      </details>
+    </div>
+
+    <!-- ══ LOWER: always visible ══ -->
+    <div class="sidebar-lower">
+
+      <!-- ③ SAVE & EXPORT (pinned at top so always reachable) -->
+      <div class="sb-section sb-section-plain">
+        <div class="sb-plain-header">
+          <span class="sb-summary-icon">💾</span>
+          <span class="sb-summary-title">Save &amp; Export</span>
+        </div>
+        <div class="sb-body">
+          <button id="saveStudentsBtn" class="btn-green w-full"
+            title="Save colour-coded .xlsx with all marks, tasks, deadlines and app state for re-import">
+            💾 Save to Excel (.xlsx)
+          </button>
+          <button id="printFeedbackBtn" class="btn-yellow w-full mt-1"
+            title="Print or save as PDF the current student's feedback">
+            🖨 Print Feedback (PDF)
+          </button>
         </div>
       </div>
-      <div class="flex flex-col justify-between">
-        <p id="progressIndicator" class="text-sm font-semibold text-purple-700 bg-purple-100 px-3 py-2 rounded text-center">Marked: 0/0 students</p>
+
+      <!-- ② STUDENT NAVIGATION -->
+      <div class="sb-section sb-section-plain">
+        <div class="sb-plain-header">
+          <span class="sb-summary-icon">👤</span>
+          <span class="sb-summary-title">Student</span>
+          <span id="progressIndicator" class="progress-badge ml-auto">0/0</span>
+        </div>
+        <div class="sb-body">
+          <select id="studentSelect" disabled class="setup-select mb-1">
+            <option value="">Select Student</option>
+          </select>
+          <div class="flex gap-1 mb-2">
+            <button id="prevStudent" disabled class="btn-nav flex-1">◀ Prev</button>
+            <button id="nextStudent" disabled class="btn-nav flex-1">Next ▶</button>
+          </div>
+          <div class="sb-sub-label mt-1">Status</div>
+          <select id="statusSelect" class="setup-select mb-1" disabled>
+            <option value="registered">Registered</option>
+            <option value="ns">⊘ Non-Submission (NS)</option>
+            <option value="ec_approved">✓ EC Approved</option>
+            <option value="ec_pending">? EC Pending</option>
+            <option value="resit">↺ Resit Student</option>
+            <option value="repeat">↺ Repeat Student</option>
+            <option value="withdrawn">✕ Withdrawn</option>
+            <option value="loa">⏸ Leave of Absence (LOA)</option>
+            <option value="suspended">⛔ Suspended</option>
+            <option value="am_investigation">⚠ AM Investigation</option>
+            <option value="deferred">⏩ Deferred Attempt</option>
+          </select>
+          <!-- EC detail panel (shown when EC status selected) -->
+          <div id="ecDetailPanel" class="student-detail-panel" style="display:none;">
+            <div class="detail-panel-title">📋 EC Details</div>
+            <label class="form-label">EC Type</label>
+            <select id="ecType" class="setup-select mb-1">
+              <option value="">Select…</option>
+              <option value="medical">Medical</option>
+              <option value="bereavement">Bereavement</option>
+              <option value="personal">Personal Crisis</option>
+              <option value="technical">Technical Issues</option>
+              <option value="other">Other</option>
+            </select>
+            <label class="form-label">Approval Date</label>
+            <input id="ecApprovalDate" type="date" class="setup-select mb-1">
+            <label class="form-label">New Deadline</label>
+            <input id="ecNewDeadline" type="date" class="setup-select mb-1">
+            <label class="form-label">Notes</label>
+            <textarea id="ecNotes" class="task-desc-textarea" placeholder="EC notes…" style="height:36px;"></textarea>
+          </div>
+
+          <!-- Resit/Repeat detail panel -->
+          <div id="resitDetailPanel" class="student-detail-panel" style="display:none;">
+            <div class="detail-panel-title">↺ Resit / Repeat Details</div>
+            <div class="resit-row">
+              <div>
+                <label class="form-label">Previous Mark</label>
+                <input id="resitPrevMark" type="number" min="0" max="100" class="setup-select" placeholder="0">
+              </div>
+              <div>
+                <label class="form-label">Attempt #</label>
+                <input id="resitAttemptNum" type="number" min="1" max="9" class="setup-select" placeholder="2">
+              </div>
+            </div>
+            <label class="form-label mt-1 resit-cap-label">
+              <input type="checkbox" id="resitCapped">
+              <span>Cap mark at pass threshold</span>
+            </label>
+          </div>
+
+          <!-- Issues button -->
+          <button id="issuesBtn" class="btn-issues w-full mt-2" disabled
+            title="View or add issues / tasks for this student">
+            🚩 Issues &amp; Tasks
+            <span id="issuesBadge" class="issues-badge" style="display:none;">0</span>
+          </button>
+        </div>
+      </div>
+
+
+    </div><!-- /sidebar-lower -->
+
+  </aside>
+
+
+  <!-- ═══════════════════════════════════════════════════════
+       RIGHT AREA
+  ═══════════════════════════════════════════════════════ -->
+  <div class="right-area">
+
+    <!-- Tab bar -->
+    <div class="tab-bar">
+      <button class="tab-btn active" data-tab="home">🏠 Home</button>
+      <button class="tab-btn" data-tab="mark">📝 Mark</button>
+      <button class="tab-btn" data-tab="students">👥 Students</button>
+      <button class="tab-btn" data-tab="analytics">📊 Analytics</button>
+      <button class="tab-btn" data-tab="issues">🚩 Issues</button>
+    </div>
+
+    <!-- ── TAB: Home ─────────────────────────────────────── -->
+    <div id="tab-home" class="tab-panel tab-panel-home">
+      <div class="home-scroll">
+
+        <!-- Hero -->
+        <div class="home-hero">
+          <div class="home-hero-icon">📋</div>
+          <h1 class="home-title">Marking &amp; Feedback App</h1>
+          <p class="home-subtitle">Rubric-based marking, feedback generation &amp; academic workflow management</p>
+          <p class="home-dev">Developed by <strong>Iftikhar Afridi</strong> &middot; Ulster University</p>
+        </div>
+
+        <!-- GDPR Notice -->
+        <div class="home-gdpr">
+          <span class="home-gdpr-icon">🔒</span>
+          <div>
+            <strong>Privacy Notice</strong> — All processing happens locally in your browser.
+            No student data, marks, or feedback are uploaded to any external server.
+            The app works fully offline after loading.
+          </div>
+        </div>
+
+        <!-- Steps -->
+        <div class="home-steps">
+
+          <div class="home-step">
+            <div class="step-num">1</div>
+            <div class="step-body">
+              <div class="step-title">Select Module &amp; Load Rubric <span class="step-badge step-required">Required</span></div>
+              <p class="step-desc">Open <strong>⚙ Setup</strong> in the sidebar. Choose your university, programme, module and assessment from the dropdowns to load a built-in rubric automatically. Alternatively, paste your own rubric markdown or upload a <code>.md</code> file and click <em>Load Rubric</em>.</p>
+              <details class="sample-rubric-details">
+                <summary class="sample-rubric-toggle">📄 Show sample rubric format</summary>
+                <pre class="sample-rubric-code">---
+module_code: COM101
+module_title: Introduction to Computing
+tutor_name: Dr. Smith
+semester: S1 2024-25
+partner: Ulster University
+---
+
+# Criterion 1: Analysis [30]
+## Marks: 25 - 30 (Distinction)
+- Comprehensive and insightful analysis
+- All key concepts addressed with depth
+
+## Marks: 19 - 24 (Commendation)
+- Clear analysis with minor gaps
+- Most concepts addressed
+
+## Marks: 13 - 18 (Pass)
+- Basic analysis present
+- Some concepts missing
+
+## Marks: 0 - 12 (Fail)
+- Limited or superficial analysis
+
+# Criterion 2: Implementation [40]
+## Marks: 34 - 40 (Distinction)
+- Fully working solution
+- Clean, well-structured code
+
+## Marks: 27 - 33 (Commendation)
+- Mostly working solution
+- Minor issues present
+
+## Marks: 20 - 26 (Pass)
+- Partial implementation
+- Significant issues present
+
+## Marks: 0 - 19 (Fail)
+- Not working or missing</pre>
+              </details>
+            </div>
+          </div>
+
+          <div class="home-step">
+            <div class="step-num">2</div>
+            <div class="step-body">
+              <div class="step-title">Enter Your Name <span class="step-badge step-required">Required</span></div>
+              <p class="step-desc">In <strong>⚙ Setup</strong>, type your name in the <em>First Marker Name</em> field. This appears in every piece of generated feedback — it is intentionally blank so each marker must enter their own name.</p>
+            </div>
+          </div>
+
+          <div class="home-step">
+            <div class="step-num">3</div>
+            <div class="step-body">
+              <div class="step-title">Import Student List <span class="step-badge step-optional">Optional</span></div>
+              <p class="step-desc">Upload an Excel (.xlsx) or CSV file with at least two columns: <strong>Student ID</strong> and <strong>Name</strong>. You can also re-import a previously saved session — the app automatically reads the Full Data sheet and restores all marks, feedback, statuses and issues. Skip this step if marking anonymously or testing a rubric.</p>
+            </div>
+          </div>
+
+          <div class="home-step">
+            <div class="step-num">4</div>
+            <div class="step-body">
+              <div class="step-title">Mark Each Student</div>
+              <p class="step-desc">Select a student from the sidebar dropdown or use <em>◀ Prev / Next ▶</em>. In the <strong>📝 Mark</strong> tab, tick feedback points for each criterion and add per-criterion comments. Use <em>💬 Overall Comments</em> for general feedback. Set the student's <strong>Status</strong> (e.g. Non-Submission, EC Approved, Resit, Withdrawn) using the dropdown in the sidebar.</p>
+            </div>
+          </div>
+
+          <div class="home-step">
+            <div class="step-num">5</div>
+            <div class="step-body">
+              <div class="step-title">Export Feedback</div>
+              <p class="step-desc">At the bottom of the Mark tab: <strong>📋 Copy text</strong> for plain feedback · <strong>🎓 Blackboard</strong> for formatted HTML · <strong>📄 Word doc</strong> to download .docx · <strong>🔧 Moodle XML</strong> for Moodle import.</p>
+            </div>
+          </div>
+
+          <div class="home-step">
+            <div class="step-num">6</div>
+            <div class="step-body">
+              <div class="step-title">Save Your Session</div>
+              <p class="step-desc">Click <strong>💾 Save to Excel</strong> at any time. Creates a file with two sheets: <em>Marks</em> (readable summary with per-criterion columns) and <em>Full Data</em> (used to restore the session by re-importing). A third <em>Tasks</em> sheet saves all module tasks.</p>
+            </div>
+          </div>
+
+          <div class="home-step">
+            <div class="step-num">7</div>
+            <div class="step-body">
+              <div class="step-title">Track Issues &amp; Tasks</div>
+              <p class="step-desc">Use the <strong>🚩 Issues</strong> tab to manage two separate lists: <em>Student Issues</em> (per-student flags such as academic misconduct, EC cases, viva required) and <em>Module Tasks</em> (operational to-dos such as moderation meetings, uploading marks, contacting the module leader). Tasks support priority, deadline and status tracking.</p>
+            </div>
+          </div>
+
+        </div><!-- /home-steps -->
+
+        <!-- Help & Support -->
+        <div class="home-help">
+          <div class="home-help-title">💬 Need Help or Want to Give Feedback?</div>
+          <p class="home-help-desc">For support, suggestions, bug reports or feature requests, contact the developer:</p>
+          <a href="mailto:iftikharafridi@gmail.com" class="home-help-email">✉ iftikharafridi@gmail.com</a>
+        </div>
+
+        <div class="home-footer">
+          Marking &amp; Feedback App &middot; Ulster University &middot; 2025
+        </div>
+
+      </div><!-- /home-scroll -->
+    </div>
+
+    <!-- ── TAB: Mark ─────────────────────────────────────── -->
+    <div id="tab-mark" class="tab-panel" style="display:none;">
+      <div class="criteria-area">
+        <div id="rubricContainer" class="criteria-grid text-[11px]"></div>
+        <div class="overall-comments-wrap">
+          <div class="overall-comments-header">
+            💬 Overall Comments
+            <span class="overall-comments-hint">(general feedback not tied to any criterion)</span>
+          </div>
+          <textarea id="overallComments" class="overall-comments-textarea"
+            placeholder="Add overall comments about this student's submission…"></textarea>
+        </div>
+
+        <!-- Student activity timeline -->
+        <div class="student-timeline-wrap" id="studentTimelineWrap" style="display:none;">
+          <div class="overall-comments-header">
+            📋 Student Activity Log
+            <span class="overall-comments-hint">(auto-logged events + tutor notes)</span>
+          </div>
+          <div id="studentTimeline" class="student-timeline"></div>
+          <div class="timeline-add-row">
+            <input id="timelineNote" type="text" class="setup-select"
+              placeholder="Add a tutor note to this student's log…"
+              style="flex:1;padding:4px 6px;font-size:10px;">
+            <button id="timelineAddBtn" class="btn-action" style="flex-shrink:0;">+ Log Note</button>
+          </div>
+        </div>
+      </div>
+      <div id="feedbackFooter" class="feedback-footer flex-shrink-0">
+        <div class="footer-score-row">
+          <span class="footer-score-label">Score</span>
+          <span class="footer-score-value">
+            <span id="totalScore">0</span>/<span id="maxScore">100</span>
+          </span>
+          <span class="footer-pct"><span id="percentage">0</span>%</span>
+          <span id="resitCapNote" class="resit-cap-note" style="display:none;"></span>
+          <span id="scoringProgressBadge" class="scoring-progress-badge" style="display:none;"></span>
+          <button id="feedbackToggle" class="btn-feedback-toggle">▼ View Feedback</button>
+          <div class="footer-export-btns">
+            <button id="copyBtn"   class="btn-blue"   title="Copy plain feedback text to clipboard">📋 Copy text</button>
+            <button id="copyBbBtn" class="btn-yellow" title="Copy formatted feedback for Blackboard LMS">🎓 Blackboard</button>
+            <button id="docxBtn"   class="btn-purple" title="Download feedback as a Word (.docx) document">📄 Word doc</button>
+            <button id="xmlBtn"    class="btn-dark"   title="Generate Moodle-compatible XML feedback file">🔧 Moodle XML</button>
+          </div>
+        </div>
+        <div id="boundaryRow" class="boundary-row" style="display:none;">
+          <span id="boundaryBadge" class="boundary-badge-pill"></span>
+          <span id="guidanceMsg"   class="boundary-guidance"></span>
+        </div>
+        <div id="feedbackTextPanel" style="display:none;" class="px-3 pb-2">
+          <textarea id="finalOutput" readonly
+            class="w-full border border-gray-300 rounded p-2 text-[10px] font-mono resize-y"
+            style="height:110px;"></textarea>
+        </div>
       </div>
     </div>
-    <div class="flex flex-col md:flex-row gap-4 mt-6">
-      <button id="saveStudentsBtn" class="bg-green-600 text-white px-1.5 py-0.5 rounded text-[10px] w-full md:w-auto">Save to Excel</button>
-      <button id="exportStudentsBtn" disabled class="bg-indigo-600 text-white px-1.5 py-0.5 rounded text-[10px] w-full md:w-auto">Export Marks</button>
-    </div>
-  </section>
 
-  <!-- Assessment Criteria -->
-  <section class="bg-white shadow-sm rounded border border-gray-600 p-2">
-    <h2 class="text-xl font-bold mb-2">Assessment Criteria</h2>
-    <p class="text-sm text-gray-500 mb-3">Use this section to evaluate each criterion based on the rubric.</p>
-    <details open class="border border-gray-600 rounded-md">
-      <summary class="bg-gray-100 px-4 py-2 cursor-pointer font-medium">Rubric Details</summary>
-      <div id="rubricContainer" class="p-2 space-y-4 text-sm">
-        <!-- Each criterion will be a block; subcriteria inside will align in a row -->
+    <!-- ── TAB: Students ─────────────────────────────────── -->
+    <div id="tab-students" class="tab-panel" style="display:none;">
+      <div class="tab-scroll-area">
+        <div class="tab-section-header">
+          👥 Student Overview
+          <span class="tab-section-hint">Click row to open · Right-click for options</span>
+        </div>
+        <div class="students-search-bar">
+          <input id="studentSearch" type="search" placeholder="Search by name or ID…" class="student-search-input">
+        </div>
+        <div id="studentsLegend" class="students-legend">
+          <span class="legend-dot dot-marked"></span>Marked
+          <span class="legend-dot dot-ns ml-3"></span>Non-Submission
+          <span class="legend-dot dot-unmarked ml-3"></span>Not yet marked
+          <span class="legend-dot dot-issues ml-3"></span>Has open issues
+        </div>
+        <div class="students-table-wrap">
+          <table id="studentsTable" class="students-table">
+            <thead>
+              <tr>
+                <th>#</th>
+                <th>Student ID</th>
+                <th>Name</th>
+                <th>Score</th>
+                <th>%</th>
+                <th>Status</th>
+                <th>Issues</th>
+              </tr>
+            </thead>
+            <tbody id="studentsTableBody">
+              <tr><td colspan="7" class="table-empty">No students loaded — upload a list in Setup.</td></tr>
+            </tbody>
+          </table>
+        </div>
       </div>
-    </details>
-  </section>
+    </div>
 
-  <!-- Feedback Summary -->
-  <section class="bg-gray-50 shadow-md rounded-lg border border-gray-600 p-6">
-    <h2 class="text-lg font-semibold mb-2">Feedback Summary</h2>
-    <div class="flex flex-col md:flex-row md:justify-between md:items-center mb-3">
-      <span>Total Score: <span id="totalScore">0</span>/<span id="maxScore">100</span></span>
-      <span>Percentage: <span id="percentage">0</span>%</span>
-    </div>
-    <textarea id="finalOutput" readonly class="w-full border border-gray-600 p-2 rounded mb-3"></textarea>
-    <div class="flex flex-wrap gap-2">
-      <button id="copyBtn" class="bg-blue-600 text-white px-4 py-2 rounded">Copy Feedback</button>
-      <button id="copyBbBtn" class="bg-yellow-500 text-white px-1.5 py-0.5 rounded text-[10px]">Copy for Blackboard</button>
-      <button id="docxBtn" class="bg-purple-600 text-white px-1.5 py-0.5 rounded text-[10px]">Export as DOCX</button>
-      <button id="xmlBtn" class="bg-gray-800 text-white px-1.5 py-0.5 rounded text-[10px]">Generate Moodle XML</button>
-    </div>
-  </section>
-</main>
+    <!-- ── TAB: Analytics ────────────────────────────────── -->
+    <div id="tab-analytics" class="tab-panel" style="display:none;">
+      <div class="tab-scroll-area">
 
-    <div id="bbHiddenCopy" contenteditable="true" style="position: absolute; left: -9999px; white-space: pre-wrap;">
+        <!-- Deadline tracker -->
+        <div class="tab-section-header">⏰ Module Deadlines</div>
+        <div class="deadlines-grid" id="deadlinesGrid">
+          <div class="deadline-card">
+            <label class="deadline-label">📥 Submission</label>
+            <input type="date" id="dlSubmission" class="deadline-input">
+            <div id="dlSubmissionChip" class="deadline-countdown"></div>
+          </div>
+          <div class="deadline-card">
+            <label class="deadline-label">✏️ Marking</label>
+            <input type="date" id="dlMarking" class="deadline-input">
+            <div id="dlMarkingChip" class="deadline-countdown"></div>
+          </div>
+          <div class="deadline-card">
+            <label class="deadline-label">⚖️ Moderation</label>
+            <input type="date" id="dlModeration" class="deadline-input">
+            <div id="dlModerationChip" class="deadline-countdown"></div>
+          </div>
+          <div class="deadline-card">
+            <label class="deadline-label">📤 Feedback Release</label>
+            <input type="date" id="dlFeedback" class="deadline-input">
+            <div id="dlFeedbackChip" class="deadline-countdown"></div>
+          </div>
+        </div>
+
+        <div class="tab-section-header mt-3">📊 Marks Analytics</div>
+
+        <!-- ── Two-column analytics layout ── -->
+        <div class="analytics-two-col">
+
+          <!-- LEFT: Grade Distribution + Boundary Analysis -->
+          <div class="analytics-left">
+            <div class="analytics-col-header">📊 Grade Distribution</div>
+            <div id="gradeChart" class="grade-chart">
+              <p class="chart-empty">No marks data yet.</p>
+            </div>
+
+            <div class="analytics-col-header mt-3">📍 Boundary Analysis</div>
+            <div id="boundaryAnalysis" class="boundary-analysis-wrap">
+              <p class="chart-empty">No marks data yet.</p>
+            </div>
+
+            <div class="analytics-col-header mt-3">⚠️ Moderation Warnings</div>
+            <div id="moderationWarnings" class="moderation-warnings-wrap">
+              <p class="chart-empty">No marks data yet.</p>
+            </div>
+          </div>
+
+          <!-- RIGHT: Stats + Normal Curve -->
+          <div class="analytics-right">
+            <div class="analytics-col-header">📈 Cohort Statistics</div>
+            <div id="statsGrid" class="stats-grid">
+              <div class="stat-card"><div class="stat-val" id="statTotal">—</div><div class="stat-lbl">Total Students</div></div>
+              <div class="stat-card"><div class="stat-val" id="statMarked">—</div><div class="stat-lbl">Marked</div></div>
+              <div class="stat-card"><div class="stat-val" id="statNS">—</div><div class="stat-lbl">Non-Submission</div></div>
+              <div class="stat-card"><div class="stat-val" id="statMean">—</div><div class="stat-lbl">Mean %</div></div>
+              <div class="stat-card"><div class="stat-val" id="statMedian">—</div><div class="stat-lbl">Median %</div></div>
+              <div class="stat-card"><div class="stat-val" id="statSD">—</div><div class="stat-lbl">Std Dev</div></div>
+              <div class="stat-card"><div class="stat-val" id="statMin">—</div><div class="stat-lbl">Min %</div></div>
+              <div class="stat-card"><div class="stat-val" id="statMax">—</div><div class="stat-lbl">Max %</div></div>
+              <div class="stat-card stat-card-wide"><div class="stat-val" id="statPass">—</div><div class="stat-lbl" id="statPassLbl">Pass Rate</div></div>
+              <div class="stat-card stat-card-wide"><div class="stat-val" id="statIssues">—</div><div class="stat-lbl">Students with Open Issues</div></div>
+            </div>
+
+            <div class="analytics-col-header mt-3">📉 Normal Distribution</div>
+            <div id="normalCurveWrap" class="normal-curve-wrap">
+              <p class="chart-empty">No marks data yet.</p>
+            </div>
+          </div>
+
+        </div><!-- /analytics-two-col -->
+
+      </div>
     </div>
-    <script src="https://cdn.jsdelivr.net/npm/docx@7.8.2/build/index.js"></script>
-    <script src="./assets/docx-library.js"></script>
-    <script src="./js/script.js"></script>
-    <script src="./js/rubric-loader.js"></script>
+
+    <!-- ── TAB: Issues ───────────────────────────────────── -->
+    <div id="tab-issues" class="tab-panel" style="display:none; flex-direction:column;">
+      <!-- Sub-tab bar -->
+      <div class="issues-subtab-bar">
+        <button class="issues-subtab active" data-subtab="student-issues">🚩 Student Issues</button>
+        <button class="issues-subtab" data-subtab="module-tasks">✅ Module Tasks</button>
+      </div>
+
+      <!-- Student Issues panel -->
+      <div id="subtab-student-issues" class="issues-subtab-panel tab-scroll-area">
+        <div class="tab-section-header">
+          🚩 Student Issues
+          <span class="tab-section-hint">Click student name to open in Mark tab · Double-click row to edit</span>
+        </div>
+
+        <!-- Quick add issue -->
+        <div class="quick-add-issue-form">
+          <div class="quick-add-issue-label">➕ Add New Issue</div>
+          <div class="quick-add-issue-row">
+            <select id="quickIssueStudent" class="setup-select qi-student-select">
+              <option value="">— Select Student —</option>
+            </select>
+            <select id="quickIssueType" class="setup-select qi-type-select">
+              <option value="general">📝 General Note</option>
+              <option value="misconduct">⚠️ Misconduct</option>
+              <option value="missing">📭 Missing Work</option>
+              <option value="ec">📋 EC Case</option>
+              <option value="extension">⏰ Extension</option>
+              <option value="viva">🎤 Viva</option>
+              <option value="query">❓ Query</option>
+              <option value="other">🔖 Other</option>
+            </select>
+            <button id="quickIssueAddBtn" class="btn-action">➕ Add</button>
+          </div>
+          <textarea id="quickIssueText" class="task-desc-textarea qi-text"
+            placeholder="Describe the issue…"></textarea>
+        </div>
+
+        <div class="issues-tab-filters">
+          <button class="issues-filter-btn active" data-filter="open">Open</button>
+          <button class="issues-filter-btn" data-filter="all">All</button>
+          <button class="issues-filter-btn" data-filter="resolved">Resolved</button>
+        </div>
+        <div class="students-table-wrap">
+          <table class="students-table">
+            <thead>
+              <tr><th>Student</th><th>Type</th><th>Description</th><th>Date</th><th>Status</th><th>Actions</th></tr>
+            </thead>
+            <tbody id="issuesTableBody">
+              <tr><td colspan="6" class="table-empty">No student issues recorded yet.</td></tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+
+      <!-- Module Tasks panel -->
+      <div id="subtab-module-tasks" class="issues-subtab-panel" style="display:none;">
+        <div class="tab-section-header" style="flex-shrink:0; padding:8px 12px; margin:0;">
+          ✅ Module Tasks
+          <span class="tab-section-hint">Click a task to view / edit details</span>
+        </div>
+
+        <!-- Add task form -->
+        <div class="task-add-form" style="flex-shrink:0;">
+          <div class="task-form-row">
+            <input id="taskTitle" type="text" class="setup-select task-title-input" placeholder="Task title…">
+            <select id="taskPriority" class="setup-select task-priority-select">
+              <option value="low">🟢 Low</option>
+              <option value="medium" selected>🟡 Medium</option>
+              <option value="high">🟠 High</option>
+              <option value="urgent">🔴 Urgent</option>
+            </select>
+            <input id="taskDeadline" type="date" class="setup-select task-deadline-input">
+            <button id="addTaskBtn" class="btn-action">➕ Add Task</button>
+          </div>
+          <textarea id="taskDescription" class="task-desc-textarea" placeholder="Description (optional)…"></textarea>
+        </div>
+
+        <!-- Split pane: list | detail -->
+        <div class="tasks-split-pane">
+
+          <!-- Left: task list -->
+          <div class="tasks-list-panel">
+            <div id="tasksListInner">
+              <div class="task-list-empty">No tasks yet — add one above.</div>
+            </div>
+          </div>
+
+          <!-- Right: task detail -->
+          <div class="tasks-detail-panel" id="tasksDetailPanel">
+            <div class="tasks-detail-empty" id="tasksDetailEmpty">
+              ← Click a task to view and edit details
+            </div>
+            <div id="tasksDetailContent" class="tasks-detail-content" style="display:none;">
+              <!-- Scrollable fields zone -->
+              <div class="td-fields-zone">
+                <div class="td-inline-header">
+                  <span id="tdInlineHeaderTitle" style="font-weight:700;font-size:11px;">Task Detail</span>
+                  <button id="tdInlineDelete" class="btn-delete-issue">🗑 Delete</button>
+                </div>
+                <label class="form-label">Title</label>
+                <input id="tdInlineTitle" type="text" class="setup-select mb-1">
+                <div style="display:flex;gap:6px;margin-bottom:4px;">
+                  <div style="flex:1;">
+                    <label class="form-label">Priority</label>
+                    <select id="tdInlinePriority" class="setup-select">
+                      <option value="low">🟢 Low</option>
+                      <option value="medium">🟡 Medium</option>
+                      <option value="high">🟠 High</option>
+                      <option value="urgent">🔴 Urgent</option>
+                    </select>
+                  </div>
+                  <div style="flex:1;">
+                    <label class="form-label">Status</label>
+                    <select id="tdInlineStatus" class="setup-select">
+                      <option value="open">Open</option>
+                      <option value="in-progress">In Progress</option>
+                      <option value="waiting">Waiting</option>
+                      <option value="resolved">Resolved</option>
+                    </select>
+                  </div>
+                  <div style="flex:1;">
+                    <label class="form-label">Deadline</label>
+                    <input id="tdInlineDeadline" type="date" class="setup-select">
+                  </div>
+                </div>
+                <label class="form-label">Description</label>
+                <textarea id="tdInlineDescription" class="task-desc-textarea mb-1" style="height:46px;"></textarea>
+                <button id="tdInlineSave" class="btn-action w-full">💾 Save Changes</button>
+              </div>
+              <!-- Notes always pinned to bottom -->
+              <div class="td-notes-section">
+                <div class="td-notes-header">📝 Activity Log
+                  <span class="td-notes-hint">— log emails sent, meetings held, actions taken</span>
+                </div>
+                <div id="tdInlineNotesList" class="td-notes-list"></div>
+                <div class="td-note-add-row">
+                  <select id="tdInlineNoteType" class="setup-select" style="min-width:100px;flex-shrink:0;">
+                    <option value="note">📝 Note</option>
+                    <option value="email">📧 Email</option>
+                    <option value="meeting">🤝 Meeting</option>
+                    <option value="action">✅ Action</option>
+                  </select>
+                  <textarea id="tdInlineNoteText" class="task-desc-textarea"
+                    placeholder="Add update…" style="height:34px;flex:1;"></textarea>
+                  <button id="tdInlineAddNote" class="btn-action" style="flex-shrink:0;">Add</button>
+                </div>
+              </div>
+            </div>
+          </div>
+
+        </div><!-- /tasks-split-pane -->
+      </div>
+    </div>
+
+  </div><!-- /right-area -->
+
+</div><!-- /app-layout -->
+
+
+<!-- ═══════════════════════════════════════════════════════
+     ISSUES MODAL
+═══════════════════════════════════════════════════════ -->
+<div id="issuesModal" class="modal-overlay" style="display:none;">
+  <div class="modal-box">
+
+    <div class="modal-header">
+      <span>🚩 Issues &amp; Tasks</span>
+      <span id="issuesModalStudent" class="modal-subtitle"></span>
+      <button id="issuesModalClose" class="modal-close">✕</button>
+    </div>
+
+    <div class="modal-body">
+
+      <!-- Existing issues list -->
+      <div class="issues-list-label">Recorded Issues</div>
+      <div id="issuesList" class="issues-list">
+        <p class="no-issues-msg">No issues recorded for this student.</p>
+      </div>
+
+      <!-- Add new issue -->
+      <div class="add-issue-section">
+        <div class="add-issue-title">➕ Add New Issue / Task</div>
+
+        <label class="form-label">Type</label>
+        <select id="issueType" class="setup-select mb-1">
+          <option value="general">📝 General Note</option>
+          <option value="misconduct">⚠️ Academic Misconduct</option>
+          <option value="missing">📭 Missing / Incomplete Work</option>
+          <option value="ec">📋 Exceptional Circumstances (EC)</option>
+          <option value="extension">⏰ Extension Request</option>
+          <option value="viva">🎤 Viva Required</option>
+          <option value="query">❓ Query / Clarification Needed</option>
+          <option value="other">🔖 Other</option>
+        </select>
+
+        <!-- Academic misconduct panel -->
+        <div id="misconductPanel" class="misconduct-panel" style="display:none;">
+          <div class="misconduct-warning-icon">⚠️</div>
+          <div>
+            <strong>Academic Misconduct Procedure</strong><br>
+            Before raising a formal case, follow the university policy and complete the required steps.
+            <a href="https://iftikharafridi.github.io/academic-misconduct-policy-app/"
+               target="_blank" rel="noopener"
+               class="misconduct-link">
+              🔗 Open Academic Misconduct Process App →
+            </a>
+          </div>
+        </div>
+
+        <label class="form-label mt-1">Description</label>
+        <textarea id="issueText" class="issue-textarea"
+          placeholder="Describe the issue or task in detail…"></textarea>
+
+        <button id="addIssueBtn" class="btn-action mt-2 w-full">➕ Add Issue</button>
+      </div>
+
+    </div>
+  </div>
+</div>
+
+
+<!-- ═══════════════════════════════════════════════════════
+     RIGHT-CLICK CONTEXT MENU (Students tab)
+═══════════════════════════════════════════════════════ -->
+<div id="contextMenu" class="context-menu" style="display:none;">
+  <div class="ctx-item" id="ctxOpenMark">📝 Open in Mark tab</div>
+  <div class="ctx-item" id="ctxAddIssue">🚩 Add Issue / Task</div>
+  <div class="ctx-item ctx-misconduct" id="ctxMisconduct">
+    ⚠️ Flag: Academic Misconduct
+    <a href="https://iftikharafridi.github.io/academic-misconduct-policy-app/"
+       target="_blank" rel="noopener" class="ctx-ext-link"
+       title="Open misconduct app">↗</a>
+  </div>
+  <div class="ctx-separator"></div>
+  <div class="ctx-item" id="ctxToggleNS">⊘ Toggle Non-Submission</div>
+</div>
+
+
+<!-- ═══════════════════════════════════════════════════════
+     EDIT ISSUE MODAL
+═══════════════════════════════════════════════════════ -->
+<div id="editIssueModal" class="modal-overlay" style="display:none;">
+  <div class="modal-box" style="max-width:440px;">
+    <div class="modal-header">
+      <span>✏️ Edit Issue</span>
+      <button id="editIssueClose" class="modal-close">✕</button>
+    </div>
+    <div class="modal-body">
+      <label class="form-label">Type</label>
+      <select id="editIssueType" class="setup-select mb-1">
+        <option value="general">📝 General Note</option>
+        <option value="misconduct">⚠️ Academic Misconduct</option>
+        <option value="missing">📭 Missing / Incomplete Work</option>
+        <option value="ec">📋 Exceptional Circumstances (EC)</option>
+        <option value="extension">⏰ Extension Request</option>
+        <option value="viva">🎤 Viva Required</option>
+        <option value="query">❓ Query / Clarification Needed</option>
+        <option value="other">🔖 Other</option>
+      </select>
+      <label class="form-label mt-1">Description</label>
+      <textarea id="editIssueText" class="issue-textarea" style="height:80px;"></textarea>
+    </div>
+    <div class="modal-footer-bar">
+      <button id="editIssueSave" class="btn-action">💾 Save Changes</button>
+      <button id="editIssueCancel" class="btn-nav">Cancel</button>
+    </div>
+  </div>
+</div>
+
+
+<!-- ═══════════════════════════════════════════════════════
+     TASK DETAIL MODAL
+═══════════════════════════════════════════════════════ -->
+<div id="taskDetailModal" class="modal-overlay" style="display:none;">
+  <div class="modal-box task-detail-box">
+    <div class="modal-header">
+      <span>📋 Task Detail</span>
+      <button id="taskDetailClose" class="modal-close">✕</button>
+    </div>
+    <div class="modal-body">
+      <label class="form-label">Title</label>
+      <input id="tdTitle" type="text" class="setup-select mb-1" style="font-size:12px;font-weight:600;">
+      <div class="td-row">
+        <div style="flex:1">
+          <label class="form-label">Priority</label>
+          <select id="tdPriority" class="setup-select">
+            <option value="low">🟢 Low</option>
+            <option value="medium">🟡 Medium</option>
+            <option value="high">🟠 High</option>
+            <option value="urgent">🔴 Urgent</option>
+          </select>
+        </div>
+        <div style="flex:1">
+          <label class="form-label">Status</label>
+          <select id="tdStatus" class="setup-select">
+            <option value="open">Open</option>
+            <option value="in-progress">In Progress</option>
+            <option value="waiting">Waiting for Response</option>
+            <option value="escalated">Escalated</option>
+            <option value="resolved">Resolved</option>
+            <option value="closed">Closed</option>
+          </select>
+        </div>
+        <div style="flex:1">
+          <label class="form-label">Deadline</label>
+          <input id="tdDeadline" type="date" class="setup-select">
+        </div>
+      </div>
+      <label class="form-label mt-1">Description</label>
+      <textarea id="tdDescription" class="issue-textarea" style="height:60px;"></textarea>
+      <div class="td-notes-section">
+        <div class="td-notes-header">📝 Notes &amp; History</div>
+        <div id="tdNotesList" class="td-notes-list"></div>
+        <div class="td-add-note">
+          <textarea id="tdNewNote" class="task-desc-textarea" placeholder="Add a note…" style="height:36px;flex:1;"></textarea>
+          <button id="tdAddNoteBtn" class="btn-action" style="flex-shrink:0;">Add Note</button>
+        </div>
+      </div>
+    </div>
+    <div class="modal-footer-bar">
+      <button id="taskDetailSave" class="btn-action">💾 Save Changes</button>
+      <button id="taskDetailDelete" class="btn-delete-issue" style="padding:5px 12px;">🗑 Delete Task</button>
+    </div>
+  </div>
+</div>
+
+
+<!-- Hidden Blackboard copy target -->
+<div id="bbHiddenCopy" contenteditable="true"
+  style="position:absolute;left:-9999px;white-space:pre-wrap;"></div>
+
+<!-- Compatibility stubs -->
+<div id="setupCollapsedBar"  style="display:none;"></div>
+<div id="setupExpandedArea"  style="display:none;"></div>
+<button id="setupCollapseBtn" style="display:none;"></button>
+<button id="setupExpandBtn"   style="display:none;"></button>
+<details id="setupDetails" style="display:none;"></details>
+
+<script src="https://cdn.jsdelivr.net/npm/docx@7.8.2/build/index.js"></script>
+<script src="./assets/docx-library.js"></script>
+<script src="./js/script.js"></script>
+<script src="./js/rubric-loader.js"></script>
 </body>
 
 </html>

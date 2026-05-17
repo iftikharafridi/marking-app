@@ -149,9 +149,10 @@ class RubricLoader {
             const rubricText = await response.text();
             //console.log(rubricText)
             document.getElementById('rubricInput').value = rubricText;
-            
+
             if (typeof window.loadRubric === 'function') {
-                window.loadRubric();
+                const success = window.loadRubric();
+                if (success) window.switchTab?.('mark');
             }
         } catch (error) {
             console.error('Error loading rubric:', error);

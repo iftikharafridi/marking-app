@@ -23,7 +23,30 @@ document.addEventListener('DOMContentLoaded', () => {
         xmlBtn: getElement('xmlBtn'),
         totalScore: getElement('totalScore'),
         maxScore: getElement('maxScore'),
-        percentage: getElement('percentage')
+        percentage: getElement('percentage'),
+        // Layout controls
+        setupCollapseBtn: getElement('setupCollapseBtn'),
+        setupExpandBtn: getElement('setupExpandBtn'),
+        setupExpandedArea: getElement('setupExpandedArea'),
+        setupCollapsedBar: getElement('setupCollapsedBar'),
+        rubricStatusChip: getElement('rubricStatusChip'),
+        studentStatusChip: getElement('studentStatusChip'),
+        nsToggle: getElement('nsToggle'),           // kept for legacy compat (hidden)
+        statusSelect: getElement('statusSelect'),
+        feedbackToggle: getElement('feedbackToggle'),
+        feedbackTextPanel: getElement('feedbackTextPanel'),
+        overallComments: getElement('overallComments'),
+        issuesBtn: getElement('issuesBtn'),
+        issuesBadge: getElement('issuesBadge'),
+        issuesModal: getElement('issuesModal'),
+        issuesModalClose: getElement('issuesModalClose'),
+        issuesModalStudent: getElement('issuesModalStudent'),
+        issuesList: getElement('issuesList'),
+        issueType: getElement('issueType'),
+        issueText: getElement('issueText'),
+        addIssueBtn: getElement('addIssueBtn'),
+        misconductPanel: getElement('misconductPanel'),
+        markerName: getElement('markerName'),
     };
 
     // let currentRubric = null;
@@ -35,10 +58,19 @@ document.addEventListener('DOMContentLoaded', () => {
     const state = {
         currentRubric: null,
         studentData: [],
-        currentStudentIndex: -1,  // Initialize to -1 (no student selected)
+        currentStudentIndex: -1,
+        moduleTasks: [],
+        deadlines: { submission: '', marking: '', moderation: '', feedback: '' },
+        _taskDetailIndex: -1,
         eventListeners: new WeakMap(),
-        eventListenerRefs: []
+        eventListenerRefs: [],
+        settings: { programmeLevel: 'msc', customPassMark: 50 }
     };
+
+    // Statuses that disable rubric inputs
+    const NS_LIKE_STATUSES = new Set(['ns', 'withdrawn', 'suspended']);
+    const EC_STATUSES      = new Set(['ec_approved', 'ec_pending']);
+    const RESIT_STATUSES   = new Set(['resit', 'repeat']);
 
 
     // // Initialize the application
@@ -55,12 +87,14 @@ document.addEventListener('DOMContentLoaded', () => {
     // Initialize the application
     function init() {
         setupEventListeners();
+        initContextMenuActions();
         testRubricLoading();
     }
 
     function setupEventListeners() {
         // Set up event listeners
-        elements.loadStudentsBtn?.addEventListener('click', handleStudentFileUpload);
+        elements.loadStudentsBtn?.addEventListener('click', () => elements.studentFileUpload?.click());
+        elements.studentFileUpload?.addEventListener('change', handleStudentFileUpload);
         elements.studentSelect?.addEventListener('change', (e) => {
             const selectedIndex = parseInt(e.target.value);
             if (!isNaN(selectedIndex) && selectedIndex >= 0) {
@@ -75,13 +109,126 @@ document.addEventListener('DOMContentLoaded', () => {
         elements.prevStudent?.addEventListener('click', () => navigateStudent(-1));
         elements.nextStudent?.addEventListener('click', () => navigateStudent(1));
         elements.saveStudentsBtn?.addEventListener('click', saveToExcel);
-        elements.exportStudentsBtn?.addEventListener('click', exportStudentData);
-        elements.loadBtn?.addEventListener('click', loadRubric);
+        document.getElementById('printFeedbackBtn')?.addEventListener('click', printStudentFeedback);
+        elements.loadBtn?.addEventListener('click', () => { if (loadRubric()) switchTab('mark'); });
         elements.fileUpload?.addEventListener('change', handleFileUpload);
         elements.copyBtn?.addEventListener('click', copyFeedback);
         elements.copyBbBtn?.addEventListener('click', copyBlackboardFeedback);
         elements.docxBtn?.addEventListener('click', exportToDOCX);
         elements.xmlBtn?.addEventListener('click', generateMoodleXML);
+        // Layout panel controls
+        elements.setupCollapseBtn?.addEventListener('click', collapseSetup);
+        elements.setupExpandBtn?.addEventListener('click', expandSetup);
+        elements.feedbackToggle?.addEventListener('click', toggleFeedbackPanel);
+        elements.nsToggle?.addEventListener('change', handleNsToggle);
+        elements.statusSelect?.addEventListener('change', handleStatusChange);
+
+        // Marker name — live-updates the feedback text
+        elements.markerName?.addEventListener('input', updateFeedbackText);
+
+        // Programme level — recalculates boundary display
+        document.getElementById('programmeLevelSelect')?.addEventListener('change', e => {
+            state.settings.programmeLevel = e.target.value;
+            const customRow = document.getElementById('customPassMarkRow');
+            if (customRow) customRow.style.display = e.target.value === 'custom' ? 'flex' : 'none';
+            updateScores();
+        });
+        document.getElementById('customPassMark')?.addEventListener('input', e => {
+            state.settings.customPassMark = parseFloat(e.target.value) || 50;
+            updateScores();
+        });
+
+        // Overall comments
+        elements.overallComments?.addEventListener('input', () => {
+            updateFeedbackText();
+            if (state.currentStudentIndex >= 0) saveStudentFeedback();
+        });
+
+        // Tab bar
+        document.querySelectorAll('.tab-btn').forEach(btn => {
+            btn.addEventListener('click', () => switchTab(btn.dataset.tab));
+        });
+
+        // Issues tab filters
+        document.querySelectorAll('.issues-filter-btn').forEach(btn => {
+            btn.addEventListener('click', () => {
+                document.querySelectorAll('.issues-filter-btn').forEach(b => b.classList.remove('active'));
+                btn.classList.add('active');
+                renderStudentIssuesSection();
+            });
+        });
+
+        // Issues sub-tabs
+        document.querySelectorAll('.issues-subtab').forEach(btn => {
+            btn.addEventListener('click', () => switchIssuesSubtab(btn.dataset.subtab));
+        });
+
+        // Module task add
+        document.getElementById('addTaskBtn')?.addEventListener('click', addModuleTask);
+
+        // Quick add issue (Issues tab)
+        document.getElementById('quickIssueAddBtn')?.addEventListener('click', quickAddIssue);
+        document.getElementById('quickIssueText')?.addEventListener('keydown', e => {
+            if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); quickAddIssue(); }
+        });
+
+        // Deadline inputs
+        ['dlSubmission','dlMarking','dlModeration','dlFeedback'].forEach(id => {
+            document.getElementById(id)?.addEventListener('change', e => {
+                const key = id.replace('dl','').toLowerCase();
+                const keyMap = { submission:'submission', marking:'marking', moderation:'moderation', feedback:'feedback' };
+                state.deadlines[keyMap[key]] = e.target.value;
+                updateDeadlineChip(id, e.target.value);
+            });
+        });
+
+        // Task split panel
+        document.getElementById('tdInlineSave')?.addEventListener('click', saveTaskInline);
+        document.getElementById('tdInlineDelete')?.addEventListener('click', deleteTaskInline);
+        document.getElementById('tdInlineAddNote')?.addEventListener('click', addNoteInline);
+        document.getElementById('tdInlineNoteText')?.addEventListener('keydown', e => {
+            if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); addNoteInline(); }
+        });
+
+        // Student timeline
+        document.getElementById('timelineAddBtn')?.addEventListener('click', addTimelineNote);
+        document.getElementById('timelineNote')?.addEventListener('keydown', e => {
+            if (e.key === 'Enter') { e.preventDefault(); addTimelineNote(); }
+        });
+
+        // Edit issue modal
+        document.getElementById('editIssueClose')?.addEventListener('click', closeIssueEdit);
+        document.getElementById('editIssueCancel')?.addEventListener('click', closeIssueEdit);
+        document.getElementById('editIssueSave')?.addEventListener('click', saveIssueEdit);
+        document.getElementById('editIssueModal')?.addEventListener('click', e => {
+            if (e.target === document.getElementById('editIssueModal')) closeIssueEdit();
+        });
+
+        // Task detail modal
+        document.getElementById('taskDetailClose')?.addEventListener('click', closeTaskDetail);
+        document.getElementById('taskDetailSave')?.addEventListener('click', saveTaskDetail);
+        document.getElementById('taskDetailDelete')?.addEventListener('click', deleteTaskFromDetail);
+        document.getElementById('tdAddNoteBtn')?.addEventListener('click', addNoteToTask);
+        document.getElementById('taskDetailModal')?.addEventListener('click', e => {
+            if (e.target === document.getElementById('taskDetailModal')) closeTaskDetail();
+        });
+
+        // Issues modal
+        elements.issuesBtn?.addEventListener('click', openIssuesModal);
+        elements.issuesModalClose?.addEventListener('click', closeIssuesModal);
+        elements.issuesModal?.addEventListener('click', e => {
+            if (e.target === elements.issuesModal) closeIssuesModal();
+        });
+        elements.issueType?.addEventListener('change', () => {
+            if (elements.misconductPanel)
+                elements.misconductPanel.style.display =
+                    elements.issueType.value === 'misconduct' ? 'flex' : 'none';
+        });
+        elements.addIssueBtn?.addEventListener('click', addIssue);
+
+        // Hide context menu on any click/scroll
+        document.addEventListener('click', hideContextMenu);
+        document.addEventListener('scroll', hideContextMenu, true);
     }
 
     // Handle file upload
@@ -120,10 +267,19 @@ document.addEventListener('DOMContentLoaded', () => {
             state.currentRubric = parseRubric(markdown);
             renderRubric(state.currentRubric);
             updateMaxScore();
-            updateFeedbackText(); // Add this line to ensure feedback is generated immediately
+            updateFeedbackText();
+
+            // Update status chip and auto-collapse setup
+            const code = state.currentRubric.metadata?.module_code || 'Rubric';
+            if (elements.rubricStatusChip) {
+                elements.rubricStatusChip.textContent = code;
+                elements.rubricStatusChip.className = 'status-chip chip-rubric';
+            }
+            return true;
         } catch (error) {
             console.error('Rubric loading error:', error);
             alert(error.message);
+            return false;
         }
     }
 
@@ -383,7 +539,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
         // Score inputs
         document.querySelectorAll('.score-input').forEach(input => {
-            const handler = () => updateScores();
+            const handler = () => { updateScores(); updateScoringProgress(); };
             input.addEventListener('input', handler);
             state.eventListeners.set(input, { type: 'input', handler });
             state.eventListenerRefs.push({ element: input, type: 'input', handler });
@@ -492,8 +648,72 @@ document.addEventListener('DOMContentLoaded', () => {
 
         elements.percentage.textContent = percentage;
 
+        // Resit cap display
+        const student = state.currentStudentIndex >= 0 ? state.studentData[state.currentStudentIndex] : null;
+        const isCapped = student && RESIT_STATUSES.has(student.status) && student.resitDetails?.capped;
+        const capPct   = getPassMark();
+        const capEl    = document.getElementById('resitCapNote');
+        if (capEl) {
+            if (isCapped && parseFloat(percentage) > capPct) {
+                capEl.textContent  = `↺ Capped at ${capPct}% (actual: ${percentage}%)`;
+                capEl.style.display = 'inline-block';
+            } else {
+                capEl.style.display = 'none';
+            }
+        }
+
+        const displayPct = isCapped ? Math.min(parseFloat(percentage), capPct) : parseFloat(percentage);
+
         // Update feedback text and save to current student
         updateFeedbackText();
+        updateBoundaryDisplay(displayPct);
+    }
+
+    // ── Mark boundary classification ──────────────────────────────────────
+    function getPassMark() {
+        const lvl = state.settings.programmeLevel;
+        if (lvl === 'bsc') return 40;
+        if (lvl === 'custom') return state.settings.customPassMark || 50;
+        return 50; // msc default
+    }
+
+    function classifyMark(pct) {
+        const pass = getPassMark();
+        const condStart     = pass - 5;      // clear fail / condoned boundary
+        const borderlineStart = pass - 1.5;  // condoned / borderline-pass boundary
+
+        if (pct >= 70)   return { zone: 'distinction',           label: 'Distinction',             guidance: null };
+        if (pct >= 68.5) return { zone: 'borderline-distinction', label: 'Near Distinction ▲',
+            guidance: `Student is close to Distinction boundary (70%). Review if assessment evidence supports the higher band.` };
+        if (pct >= 60)   return { zone: 'merit',                 label: 'Merit',                   guidance: null };
+        if (pct >= 58.5) return { zone: 'borderline-merit',      label: 'Near Merit ▲',
+            guidance: `Student is close to Merit boundary (60%). Please double-check rubric consistency.` };
+        if (pct >= pass) return { zone: 'pass',                  label: 'Pass',                    guidance: null };
+        if (pct >= borderlineStart) return { zone: 'borderline-pass', label: 'Borderline Pass ⚠',
+            guidance: `Student is within 1.5 marks of the pass threshold (${pass}%). Please review for possible borderline consideration.` };
+        if (pct >= condStart) return { zone: 'condoned-fail',    label: 'Condoned Fail Zone ⚠',
+            guidance: `Student falls within the condonable fail range (${condStart}–${pass - 0.01}%). Review programme regulations and overall performance.` };
+        return { zone: 'fail', label: 'Fail ✗',
+            guidance: `Student has failed this assessment. Score is below the pass threshold (${pass}%).` };
+    }
+
+    function updateBoundaryDisplay(pct) {
+        const badge    = document.getElementById('boundaryBadge');
+        const msg      = document.getElementById('guidanceMsg');
+        const row      = document.getElementById('boundaryRow');
+        if (!badge || !msg || !row) return;
+
+        if (!state.currentRubric || isNaN(pct)) {
+            row.style.display = 'none';
+            return;
+        }
+
+        const { zone, label, guidance } = classifyMark(pct);
+        badge.textContent  = label;
+        badge.className    = `boundary-badge-pill zone-${zone}`;
+        msg.textContent    = guidance || '';
+        row.className      = `boundary-row${guidance ? ' guidance-' + zone : ''}`;
+        row.style.display  = 'flex';
     }
 
     // function restoreStudentData() {
@@ -649,7 +869,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
         let feedbackText = '';
         feedbackText += 'Note: Marks are provisional and subject to change by exam board\n\n';
-        feedbackText += `First marker feedback: ${state.currentRubric.metadata.tutor_name || 'Marker Name'}\n\n`;
+        feedbackText += `First marker feedback: ${elements.markerName?.value.trim() || state.currentRubric.metadata?.tutor_name || 'Marker Name'}\n\n`;
 
         let totalScore = 0;
         let maxScore = state.currentRubric.criteria.reduce((sum, criterion) => sum + criterion.maxScore, 0);
@@ -702,11 +922,12 @@ document.addEventListener('DOMContentLoaded', () => {
             feedbackText += `\nGrade Boundaries: ${state.currentRubric.metadata.grade_boundaries}\n`;
         }
 
-        // // Add any additional overall comments if needed
-        // feedbackText += `\nOverall Feedback:\n`;
+        // Overall comments
+        const overallText = elements.overallComments?.value.trim();
+        if (overallText) {
+            feedbackText += `\nOverall Comments:\n${overallText}\n`;
+        }
 
-
-        // Set the final output - this was likely missing
         elements.finalOutput.value = feedbackText;
 
         // Update the UI scores immediately
@@ -936,8 +1157,8 @@ document.addEventListener('DOMContentLoaded', () => {
         }
 
         try {
-            const data = await readExcelFile(file);
-            state.studentData = processStudentData(data);
+            const { rows, appState } = await readExcelFile(file);
+            state.studentData = processStudentData(rows);
 
             if (state.studentData.length === 0) {
                 throw new Error('No student data found in the file');
@@ -948,13 +1169,53 @@ document.addEventListener('DOMContentLoaded', () => {
             state.studentData.forEach((student, index) => {
                 const option = document.createElement('option');
                 option.value = index;
-                option.textContent = `${student.id} - ${student.name}`;
+                if (student.nonSubmission) {
+                    option.textContent = `[NS] ${student.id} - ${student.name}`;
+                    option.classList.add('ns-option');
+                } else {
+                    option.textContent = `${student.id} - ${student.name}`;
+                }
                 elements.studentSelect.appendChild(option);
             });
 
             elements.studentSelect.disabled = false;
-            elements.exportStudentsBtn.disabled = false;
-            alert(`Loaded ${state.studentData.length} students`);
+            if (elements.prevStudent)  elements.prevStudent.disabled  = false;
+            if (elements.nextStudent)  elements.nextStudent.disabled  = false;
+            if (elements.statusSelect) elements.statusSelect.disabled = false;
+            if (elements.issuesBtn)    elements.issuesBtn.disabled    = false;
+
+            // Apply proper labels (issue flags, status prefix)
+            state.studentData.forEach((_, i) => updateStudentOptionLabel(i));
+
+            // Update student status chip
+            if (elements.studentStatusChip) {
+                elements.studentStatusChip.textContent = `${state.studentData.length} students`;
+                elements.studentStatusChip.className = 'status-chip chip-students';
+            }
+            populateQuickIssueSelect();
+
+            // Restore tasks, deadlines, settings from saved App State sheet
+            if (appState) {
+                if (Array.isArray(appState.moduleTasks) && appState.moduleTasks.length) {
+                    state.moduleTasks = appState.moduleTasks;
+                }
+                if (appState.deadlines) {
+                    Object.assign(state.deadlines, appState.deadlines);
+                    ['dlSubmission','dlMarking','dlModeration','dlFeedback'].forEach(id => {
+                        const key = { dlSubmission:'submission', dlMarking:'marking',
+                                      dlModeration:'moderation', dlFeedback:'feedback' }[id];
+                        const el = document.getElementById(id);
+                        if (el && state.deadlines[key]) {
+                            el.value = state.deadlines[key];
+                            updateDeadlineChip(id, state.deadlines[key]);
+                        }
+                    });
+                }
+                if (appState.settings) Object.assign(state.settings, appState.settings);
+            }
+
+            alert(`Loaded ${state.studentData.length} students` +
+                  (appState ? ' (with saved tasks & deadlines)' : ''));
 
             // Reset current student index
             state.currentStudentIndex = -1;
@@ -967,7 +1228,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
         updateProgressIndicator();
     }
-    // Read Excel file
+    // Read Excel file — prefers "Full Data" sheet; also restores App State (tasks/deadlines)
     function readExcelFile(file) {
         return new Promise((resolve, reject) => {
             const reader = new FileReader();
@@ -975,9 +1236,21 @@ document.addEventListener('DOMContentLoaded', () => {
                 try {
                     const data = new Uint8Array(e.target.result);
                     const workbook = XLSX.read(data, { type: 'array' });
-                    const firstSheet = workbook.Sheets[workbook.SheetNames[0]];
-                    const jsonData = XLSX.utils.sheet_to_json(firstSheet);
-                    resolve(jsonData);
+                    const sheetName = workbook.SheetNames.includes('Full Data')
+                        ? 'Full Data'
+                        : workbook.SheetNames[0];
+                    const rows = XLSX.utils.sheet_to_json(workbook.Sheets[sheetName]);
+                    // Try to restore app state (tasks, deadlines, settings)
+                    let appState = null;
+                    if (workbook.SheetNames.includes('App State')) {
+                        try {
+                            const asRows = XLSX.utils.sheet_to_json(workbook.Sheets['App State']);
+                            if (asRows.length && asRows[0].AppState) {
+                                appState = JSON.parse(asRows[0].AppState);
+                            }
+                        } catch(_) {}
+                    }
+                    resolve({ rows, appState });
                 } catch (error) {
                     reject(error);
                 }
@@ -1019,11 +1292,41 @@ document.addEventListener('DOMContentLoaded', () => {
                 }
             }
 
+            const nsVal = row['Non-Submission'];
+            const rawStatus = row['Student Status'] || row['Status'] || '';
+            // Derive status: prefer explicit status column, fall back to Non-Submission flag
+            let status = 'registered';
+            if (rawStatus && rawStatus !== 'Marked' && rawStatus !== 'Not Marked' && rawStatus !== 'Non-Submission') {
+                // stored as our internal key (e.g. 'ns', 'ec_approved')
+                status = rawStatus;
+            } else if (rawStatus === 'Non-Submission' || nsVal === true || nsVal === 'true' || nsVal === 1) {
+                status = 'ns';
+            }
+            const nonSubmission = NS_LIKE_STATUSES.has(status);
+
+            let issues = [];
+            try { if (row['Issues']) issues = JSON.parse(row['Issues']); } catch(_) {}
+
+            let ecDetails = {};
+            try { if (row['EC Details']) ecDetails = JSON.parse(row['EC Details']); } catch(_) {}
+
+            let resitDetails = {};
+            try { if (row['Resit Details']) resitDetails = JSON.parse(row['Resit Details']); } catch(_) {}
+
+            let timeline = [];
+            try { if (row['Timeline']) timeline = JSON.parse(row['Timeline']); } catch(_) {}
+
             return {
                 id: row['Student ID'] || row['ID'] || '',
                 name: row['Name'] || row['Student Name'] || '',
                 feedback: row['Feedback'] || '',
                 score: row['Score'] || 0,
+                status,
+                nonSubmission,
+                issues,
+                ecDetails,
+                resitDetails,
+                timeline,
                 rubricData: rubricData || {
                     scores: [],
                     selectedFeedback: [],
@@ -1086,12 +1389,45 @@ document.addEventListener('DOMContentLoaded', () => {
     // }
 
     function loadStudentFeedback() {
-        // Clear all current selections first
+        // Clear all current selections first (also re-enables inputs)
         clearAllSelections();
 
         if (state.currentStudentIndex < 0 || !state.studentData[state.currentStudentIndex]) return;
 
         const student = state.studentData[state.currentStudentIndex];
+
+        // Restore status for this student
+        const studentStatus = student.status || (student.nonSubmission ? 'ns' : 'registered');
+        student.status = studentStatus;
+        if (elements.statusSelect) elements.statusSelect.value = studentStatus;
+        showStatusDetailPanels(studentStatus);
+
+        // Restore EC details
+        const ec = student.ecDetails || {};
+        const setVal = (id, v) => { const el = document.getElementById(id); if (el) el.value = v || ''; };
+        setVal('ecType', ec.type); setVal('ecApprovalDate', ec.approvalDate);
+        setVal('ecNewDeadline', ec.newDeadline); setVal('ecNotes', ec.notes);
+
+        // Restore Resit details
+        const rs = student.resitDetails || {};
+        setVal('resitPrevMark', rs.previousMark);
+        setVal('resitAttemptNum', rs.attemptNumber);
+        const resitCap = document.getElementById('resitCapped');
+        if (resitCap) resitCap.checked = rs.capped || false;
+
+        const isDisabled = NS_LIKE_STATUSES.has(studentStatus);
+        if (isDisabled) {
+            setRubricInputsDisabled(true);
+            if (elements.finalOutput) elements.finalOutput.value = student.feedback || `${studentStatus.toUpperCase()}: This student has not submitted work for assessment.`;
+            if (elements.totalScore) elements.totalScore.textContent = '0';
+            if (elements.percentage) elements.percentage.textContent = '0';
+            const br = document.getElementById('boundaryRow');
+            if (br) br.style.display = 'none';
+            updateNavButtons();
+            return;
+        }
+        setRubricInputsDisabled(false);
+
         if (!student?.rubricData) return;
 
         // Restore scores
@@ -1122,15 +1458,24 @@ document.addEventListener('DOMContentLoaded', () => {
             });
         }
 
+        // Restore overall comments
+        if (elements.overallComments)
+            elements.overallComments.value = student.rubricData.overallComments || '';
+
         updateSelectAllStates();
         updateScores();
         updateFeedbackText();
         updateNavButtons();
+        updateScoringProgress();
+        renderStudentTimeline(student);
     }
 
 
     // New helper function to clear all selections
     function clearAllSelections() {
+        // Re-enable inputs in case previous student was NS
+        setRubricInputsDisabled(false);
+
         // Clear all score inputs
         document.querySelectorAll('.score-input').forEach(input => {
             input.value = 0;
@@ -1145,6 +1490,9 @@ document.addEventListener('DOMContentLoaded', () => {
         document.querySelectorAll('.comments-textarea').forEach(textarea => {
             textarea.value = '';
         });
+
+        // Clear overall comments
+        if (elements.overallComments) elements.overallComments.value = '';
 
         // Uncheck all "Select All" checkboxes
         document.querySelectorAll('.select-all-checkbox').forEach(checkbox => {
@@ -1235,6 +1583,34 @@ document.addEventListener('DOMContentLoaded', () => {
         });
 
         // Update student data
+        student.status = elements.statusSelect?.value || 'registered';
+        student.nonSubmission = NS_LIKE_STATUSES.has(student.status);
+
+        // Save EC details
+        if (EC_STATUSES.has(student.status)) {
+            student.ecDetails = {
+                type:         document.getElementById('ecType')?.value || '',
+                approvalDate: document.getElementById('ecApprovalDate')?.value || '',
+                newDeadline:  document.getElementById('ecNewDeadline')?.value || '',
+                notes:        document.getElementById('ecNotes')?.value || '',
+            };
+        }
+        // Save Resit details
+        if (RESIT_STATUSES.has(student.status)) {
+            student.resitDetails = {
+                previousMark:  parseFloat(document.getElementById('resitPrevMark')?.value) || 0,
+                attemptNumber: parseInt(document.getElementById('resitAttemptNum')?.value)  || 2,
+                capped:        document.getElementById('resitCapped')?.checked || false,
+            };
+        }
+        // Auto-log mark to timeline when score changes significantly
+        const prevScore = student.score || 0;
+        if (totalScore !== prevScore && totalScore > 0 && !student.nonSubmission) {
+            const maxScore = state.currentRubric.criteria.reduce((s, c) => s + c.maxScore, 0);
+            const pct = maxScore > 0 ? ((totalScore / maxScore) * 100).toFixed(1) : '0';
+            logTimeline(student, 'mark', `Mark recorded: ${totalScore.toFixed(1)}/${maxScore} (${pct}%)`);
+        }
+
         student.score = totalScore;
         student.feedback = elements.finalOutput.value;
 
@@ -1242,7 +1618,8 @@ document.addEventListener('DOMContentLoaded', () => {
             rubric: state.currentRubric,
             scores: scores,
             selectedFeedback: [],
-            criteriaComments: {}
+            criteriaComments: {},
+            overallComments: elements.overallComments?.value.trim() || ''
         };
 
         // Save selected feedback points
@@ -1266,6 +1643,7 @@ document.addEventListener('DOMContentLoaded', () => {
         });
 
         updateProgressIndicator();
+        saveToLocalStorage();
     }
 
     // Export updated student data to Excel
@@ -1439,39 +1817,6 @@ document.addEventListener('DOMContentLoaded', () => {
     //     }
     // }
 
-    async function saveToExcel() {
-        try {
-            if (!state.studentData.length) throw new Error('No student data to save');
-
-            // Prepare worksheet data
-            const wsData = state.studentData.map(student => ({
-                'Student ID': student.id,
-                'Name': student.name,
-                'Score': student.score || 0,
-                'Feedback': student.feedback || '',
-                'Rubric Data': JSON.stringify(student.rubricData || {})
-            }));
-
-            // Create workbook
-            const wb = XLSX.utils.book_new();
-            const ws = XLSX.utils.json_to_sheet(wsData);
-            XLSX.utils.book_append_sheet(wb, ws, "Student Marks");
-
-            // Generate filename
-            const timestamp = new Date().toISOString().replace(/[:.]/g, '-');
-            const filename = `student_marks_${timestamp}.xlsx`;
-
-            // Download
-            XLSX.writeFile(wb, filename);
-            alert('Student data exported successfully');
-
-        } catch (error) {
-            console.error('Export error:', error);
-            alert(`Export failed: ${error.message}`);
-        }
-    }
-
-
     // Improved column finding function
     function findColumnIndex(worksheet, headerName) {
         const range = XLSX.utils.decode_range(worksheet['!ref']);
@@ -1525,16 +1870,19 @@ document.addEventListener('DOMContentLoaded', () => {
     function updateNavButtons() {
         elements.prevStudent.disabled = state.currentStudentIndex <= 0;
         elements.nextStudent.disabled = state.currentStudentIndex >= state.studentData.length - 1;
+        if (elements.nsToggle) elements.nsToggle.disabled = state.currentStudentIndex < 0;
+        if (elements.issuesBtn) elements.issuesBtn.disabled = state.currentStudentIndex < 0;
+        updateIssuesBadge();
     }
 
     function updateProgressIndicator() {
         if (!elements.progressIndicator) return;
-
-        // const markedCount = studentData.filter(s => s.score > 0).length;
-        // const totalCount = studentData.length;
-        const markedCount = state.studentData.filter(s => s.score > 0).length;
-        const totalCount = state.studentData.length;
-        elements.progressIndicator.textContent = `Marked: ${markedCount}/${totalCount} students`;
+        const nsCount      = state.studentData.filter(s => s.nonSubmission).length;
+        const markedCount  = state.studentData.filter(s => s.score > 0 && !s.nonSubmission).length;
+        const totalCount   = state.studentData.length;
+        let text = `${markedCount}/${totalCount} marked`;
+        if (nsCount > 0) text += ` · ${nsCount} NS`;
+        elements.progressIndicator.textContent = text;
     }
 
     // Temporary test function
@@ -1589,9 +1937,1713 @@ partner: Ulster University
     }
 
 
-    // Make loadRubric available globally
+    // Make loadRubric and switchTab available globally (used by rubric-loader.js)
     window.loadRubric = loadRubric;
+    window.switchTab  = switchTab;
+
+    // ── Setup panel collapse / expand ─────────────────────────────────────
+    function collapseSetup() {
+        const details = document.getElementById('setupDetails');
+        if (details) details.open = false;
+    }
+
+    function expandSetup() {
+        const details = document.getElementById('setupDetails');
+        if (details) details.open = true;
+    }
+
+    // ── Feedback textarea panel toggle ────────────────────────────────────
+    function toggleFeedbackPanel() {
+        const panel = elements.feedbackTextPanel;
+        const btn = elements.feedbackToggle;
+        if (!panel) return;
+        const hidden = panel.style.display === 'none';
+        panel.style.display = hidden ? 'block' : 'none';
+        if (btn) btn.textContent = hidden ? '▲ Feedback' : '▼ Feedback';
+    }
+
+    // ── Student status handling ───────────────────────────────────────────
+    function handleStatusChange() {
+        if (state.currentStudentIndex < 0) {
+            if (elements.statusSelect) elements.statusSelect.value = 'registered';
+            return;
+        }
+        const student = state.studentData[state.currentStudentIndex];
+        if (!student) return;
+
+        const newStatus = elements.statusSelect?.value || 'registered';
+        student.status = newStatus;
+        student.nonSubmission = NS_LIKE_STATUSES.has(newStatus);
+
+        if (student.nonSubmission) {
+            clearAllSelections();
+            student.score = 0;
+            const label = elements.statusSelect?.options[elements.statusSelect.selectedIndex]?.text || newStatus;
+            student.feedback = `${label}: This student has not submitted any work for assessment.`;
+            if (elements.finalOutput) elements.finalOutput.value = student.feedback;
+            if (elements.totalScore) elements.totalScore.textContent = '0';
+            if (elements.percentage) elements.percentage.textContent = '0';
+            setRubricInputsDisabled(true);
+        } else {
+            setRubricInputsDisabled(false);
+            updateScores();
+            updateFeedbackText();
+        }
+
+        // Log status change to student timeline
+        const statusLabel = elements.statusSelect?.options[elements.statusSelect.selectedIndex]?.text || newStatus;
+        logTimeline(student, 'status', `Status set to: ${statusLabel}`);
+        renderStudentTimeline(student);
+
+        updateStudentOptionLabel(state.currentStudentIndex);
+        updateProgressIndicator();
+        showStatusDetailPanels(newStatus);
+        saveStudentFeedback();
+    }
+
+    function showStatusDetailPanels(status) {
+        const ecPanel    = document.getElementById('ecDetailPanel');
+        const resitPanel = document.getElementById('resitDetailPanel');
+        if (ecPanel)    ecPanel.style.display    = EC_STATUSES.has(status)    ? 'block' : 'none';
+        if (resitPanel) resitPanel.style.display = RESIT_STATUSES.has(status) ? 'block' : 'none';
+    }
+
+    // Legacy NS toggle (kept for backward compat, delegates to status)
+    function handleNsToggle() {
+        if (!elements.statusSelect) return;
+        elements.statusSelect.value = elements.nsToggle?.checked ? 'ns' : 'registered';
+        handleStatusChange();
+    }
+
+    function setRubricInputsDisabled(disabled) {
+        const container = elements.rubricContainer;
+        if (!container) return;
+        if (disabled) {
+            container.classList.add('rubric-ns-overlay');
+        } else {
+            container.classList.remove('rubric-ns-overlay');
+        }
+        container.querySelectorAll('.score-input, .feedback-item input[type="checkbox"], .select-all-checkbox, .comments-textarea').forEach(el => {
+            el.disabled = disabled;
+        });
+    }
+
+    // ── Tab switching ─────────────────────────────────────────────────────
+    function switchTab(tabName) {
+        document.querySelectorAll('.tab-panel').forEach(p => p.style.display = 'none');
+        document.querySelectorAll('.tab-btn').forEach(b => b.classList.remove('active'));
+
+        const panel = document.getElementById('tab-' + tabName);
+        if (panel) panel.style.display = 'flex';
+
+        const btn = document.querySelector(`.tab-btn[data-tab="${tabName}"]`);
+        if (btn) btn.classList.add('active');
+
+        if (tabName === 'students')  renderStudentsTab();
+        if (tabName === 'analytics') renderAnalyticsTab();
+        if (tabName === 'issues')    renderIssuesTab();
+    }
+
+    // ── Issues tab ────────────────────────────────────────────────────────
+    function renderIssuesTab() {
+        renderStudentIssuesSection();
+    }
+
+    function renderStudentIssuesSection() {
+        const tbody = document.getElementById('issuesTableBody');
+        if (!tbody) return;
+
+        const activeFilter = document.querySelector('.issues-filter-btn.active')?.dataset.filter || 'open';
+
+        const typeLabels = {
+            general:    ['📝 General',    'type-general'],
+            misconduct: ['⚠️ Misconduct', 'type-misconduct'],
+            missing:    ['📭 Missing',    'type-missing'],
+            ec:         ['📋 EC Case',    'type-query'],
+            extension:  ['⏰ Extension',  'type-general'],
+            viva:       ['🎤 Viva',       'type-misconduct'],
+            query:      ['❓ Query',      'type-query'],
+            other:      ['🔖 Other',      'type-other'],
+        };
+
+        const rows = [];
+        state.studentData.forEach((student, sIdx) => {
+            (student.issues || []).forEach((issue, iIdx) => {
+                if (activeFilter === 'open'     && issue.resolved)  return;
+                if (activeFilter === 'resolved' && !issue.resolved) return;
+                rows.push({ student, sIdx, issue, iIdx });
+            });
+        });
+
+        if (!rows.length) {
+            const label = activeFilter === 'all' ? '' : activeFilter + ' ';
+            tbody.innerHTML = `<tr><td colspan="6" class="table-empty">No ${label}issues found.</td></tr>`;
+            return;
+        }
+
+        tbody.innerHTML = rows.map(({ student, sIdx, issue, iIdx }) => {
+            const [label, cls] = typeLabels[issue.type] || ['🔖 Other', 'type-other'];
+            const statusBadge = issue.resolved
+                ? '<span class="badge-marked">Resolved</span>'
+                : '<span class="badge-issues-open">Open</span>';
+            return `<tr class="${issue.resolved ? 'row-resolved' : ''}" data-sidx="${sIdx}" data-iidx="${iIdx}" title="Double-click to edit this issue">
+                <td><span class="student-name-link" data-idx="${sIdx}">${student.name}<br><small style="font-weight:400;color:#6b7280">${student.id}</small></span></td>
+                <td><span class="issue-type-badge ${cls}">${label}</span></td>
+                <td class="issue-desc-cell">${issue.text}</td>
+                <td style="white-space:nowrap;font-size:10px">${issue.date || ''}</td>
+                <td>${statusBadge}</td>
+                <td style="white-space:nowrap">
+                    <button class="btn-resolve ${issue.resolved ? 'resolved' : ''}"
+                        onclick="window._resolveIssueGlobal(${sIdx},${iIdx})">${issue.resolved ? 'Reopen' : 'Resolve'}</button>
+                    <button class="btn-delete-issue" onclick="window._deleteIssueGlobal(${sIdx},${iIdx})">✕</button>
+                </td>
+            </tr>`;
+        }).join('');
+
+        // Double-click a row → edit that issue
+        tbody.querySelectorAll('tr[data-sidx]').forEach(row => {
+            row.addEventListener('dblclick', e => {
+                if (e.target.closest('button')) return; // don't intercept button clicks
+                openIssueEdit(parseInt(row.dataset.sidx), parseInt(row.dataset.iidx));
+            });
+        });
+
+        // Student name → jump to Mark tab
+        tbody.querySelectorAll('.student-name-link').forEach(link => {
+            link.addEventListener('click', () => {
+                const idx = parseInt(link.dataset.idx);
+                state.currentStudentIndex = idx;
+                elements.studentSelect.value = idx;
+                loadStudentFeedback();
+                switchTab('mark');
+            });
+        });
+    }
+
+    function populateQuickIssueSelect() {
+        const sel = document.getElementById('quickIssueStudent');
+        if (!sel) return;
+        const prev = sel.value;
+        sel.innerHTML = '<option value="">— Select Student —</option>';
+        state.studentData.forEach((s, i) => {
+            const opt = document.createElement('option');
+            opt.value = i;
+            opt.textContent = `${s.id} - ${s.name}`;
+            sel.appendChild(opt);
+        });
+        if (prev !== '') sel.value = prev;
+    }
+
+    function quickAddIssue() {
+        const sIdx = parseInt(document.getElementById('quickIssueStudent')?.value);
+        const student = isNaN(sIdx) ? null : state.studentData[sIdx];
+        if (!student) { alert('Please select a student first.'); return; }
+        const text = document.getElementById('quickIssueText')?.value.trim();
+        if (!text) { alert('Please describe the issue.'); return; }
+        if (!student.issues) student.issues = [];
+        student.issues.push({
+            type: document.getElementById('quickIssueType')?.value || 'general',
+            text,
+            date: new Date().toLocaleDateString('en-GB', { day:'2-digit', month:'short', year:'numeric' }),
+            resolved: false
+        });
+        document.getElementById('quickIssueText').value = '';
+        renderStudentIssuesSection();
+        updateIssuesBadge();
+        updateStudentOptionLabel(sIdx);
+        saveToLocalStorage();
+    }
+
+    window._resolveIssueGlobal = function(sIdx, iIdx) {
+        const student = state.studentData[sIdx];
+        if (!student?.issues?.[iIdx]) return;
+        student.issues[iIdx].resolved = !student.issues[iIdx].resolved;
+        renderIssuesTab();
+        updateIssuesBadge();
+        updateStudentOptionLabel(sIdx);
+    };
+
+    window._deleteIssueGlobal = function(sIdx, iIdx) {
+        const student = state.studentData[sIdx];
+        if (!student?.issues) return;
+        student.issues.splice(iIdx, 1);
+        renderIssuesTab();
+        updateIssuesBadge();
+        updateStudentOptionLabel(sIdx);
+    };
+
+    // ── Issue edit modal ──────────────────────────────────────────────────
+    let _editIssueTarget = { sIdx: -1, iIdx: -1 };
+
+    function openIssueEdit(sIdx, iIdx) {
+        const issue = state.studentData[sIdx]?.issues?.[iIdx];
+        if (!issue) return;
+        _editIssueTarget = { sIdx, iIdx };
+        const typeEl = document.getElementById('editIssueType');
+        const textEl = document.getElementById('editIssueText');
+        if (typeEl) typeEl.value = issue.type || 'general';
+        if (textEl) textEl.value = issue.text || '';
+        document.getElementById('editIssueModal').style.display = 'flex';
+    }
+
+    function saveIssueEdit() {
+        const { sIdx, iIdx } = _editIssueTarget;
+        const issue = state.studentData[sIdx]?.issues?.[iIdx];
+        if (!issue) return;
+        issue.type = document.getElementById('editIssueType')?.value || issue.type;
+        issue.text = document.getElementById('editIssueText')?.value.trim() || issue.text;
+        closeIssueEdit();
+        renderStudentIssuesSection();
+        updateIssuesBadge();
+    }
+
+    function closeIssueEdit() {
+        document.getElementById('editIssueModal').style.display = 'none';
+        _editIssueTarget = { sIdx: -1, iIdx: -1 };
+    }
+
+    // ── Student activity timeline ─────────────────────────────────────────
+    const TIMELINE_ICONS = {
+        status:  '🔄', note: '📝', issue: '🚩', mark: '✏️', feedback: '💬', system: 'ℹ️'
+    };
+
+    function logTimeline(student, type, text) {
+        if (!student) return;
+        if (!student.timeline) student.timeline = [];
+        student.timeline.push({
+            date:   new Date().toLocaleString('en-GB', { day:'2-digit', month:'short', year:'numeric', hour:'2-digit', minute:'2-digit' }),
+            author: document.getElementById('markerName')?.value.trim() || 'Marker',
+            type,
+            text
+        });
+    }
+
+    function renderStudentTimeline(student) {
+        const wrap     = document.getElementById('studentTimelineWrap');
+        const timeline = document.getElementById('studentTimeline');
+        if (!wrap || !timeline) return;
+
+        if (!student) { wrap.style.display = 'none'; return; }
+        wrap.style.display = 'block';
+
+        const entries = student.timeline || [];
+        if (!entries.length) {
+            timeline.innerHTML = '<div class="timeline-empty">No activity logged yet.</div>';
+            return;
+        }
+        timeline.innerHTML = [...entries].reverse().map(e => `
+            <div class="timeline-entry">
+                <span class="timeline-icon">${TIMELINE_ICONS[e.type] || 'ℹ️'}</span>
+                <span class="timeline-text">${e.text}</span>
+                <span class="timeline-date">${e.date}${e.author ? ' · ' + e.author : ''}</span>
+            </div>`).join('');
+    }
+
+    function addTimelineNote() {
+        if (state.currentStudentIndex < 0) return;
+        const student = state.studentData[state.currentStudentIndex];
+        if (!student) return;
+        const input = document.getElementById('timelineNote');
+        const text  = input?.value.trim();
+        if (!text) return;
+        logTimeline(student, 'note', text);
+        input.value = '';
+        renderStudentTimeline(student);
+    }
+
+    // ── Students tab ──────────────────────────────────────────────────────
+    function renderStudentsTab() {
+        const tbody = document.getElementById('studentsTableBody');
+        if (!tbody) return;
+
+        if (!state.studentData.length) {
+            tbody.innerHTML = '<tr><td colspan="6" class="table-empty">No students loaded — upload a list in Setup.</td></tr>';
+            return;
+        }
+
+        const maxScore = state.currentRubric
+            ? state.currentRubric.criteria.reduce((s, c) => s + c.maxScore, 0)
+            : 0;
+
+        tbody.innerHTML = state.studentData.map((student, index) => {
+            const pct = maxScore > 0
+                ? ((student.score / maxScore) * 100).toFixed(1)
+                : (student.score > 0 ? '—' : '0.0');
+
+            let rowClass, badgeClass, badgeText;
+            if (student.nonSubmission) {
+                rowClass = 'row-ns'; badgeClass = 'badge-ns'; badgeText = 'Non-Submission';
+            } else if (student.score > 0) {
+                rowClass = 'row-marked'; badgeClass = 'badge-marked'; badgeText = 'Marked';
+            } else {
+                rowClass = 'row-unmarked'; badgeClass = 'badge-unmarked'; badgeText = 'Not marked';
+            }
+
+            const openIssues = (student.issues || []).filter(i => !i.resolved).length;
+            const issuesCell = openIssues > 0
+                ? `<span class="issues-cell-count has-issues">🚩 ${openIssues}</span>`
+                : `<span class="issues-cell-count">—</span>`;
+
+            const pctNum = parseFloat(pct);
+            const zoneInfo = (!student.nonSubmission && student.score > 0 && !isNaN(pctNum))
+                ? classifyMark(pctNum) : null;
+            const zonePill = zoneInfo
+                ? `<span class="boundary-badge-pill zone-${zoneInfo.zone}" style="margin-left:4px;font-size:8px;">${zoneInfo.label}</span>`
+                : '';
+
+            return `<tr class="${rowClass}" data-index="${index}">
+                <td>${index + 1}</td>
+                <td>${student.id}</td>
+                <td>${student.name}</td>
+                <td>${student.nonSubmission ? '—' : student.score.toFixed(1)}</td>
+                <td>${student.nonSubmission ? '—' : pct + '%'}${zonePill}</td>
+                <td><span class="status-badge ${badgeClass}">${badgeText}</span></td>
+                <td>${issuesCell}</td>
+            </tr>`;
+        }).join('');
+
+        tbody.querySelectorAll('tr[data-index]').forEach(row => {
+            const idx = parseInt(row.dataset.index);
+            // Left-click → open in Mark tab
+            row.addEventListener('click', () => {
+                if (state.currentStudentIndex >= 0) saveStudentFeedback();
+                state.currentStudentIndex = idx;
+                elements.studentSelect.value = idx;
+                loadStudentFeedback();
+                switchTab('mark');
+            });
+            // Right-click → context menu
+            row.addEventListener('contextmenu', e => showContextMenu(e, idx));
+        });
+    }
+
+    // ── Analytics tab ─────────────────────────────────────────────────────
+    function renderAnalyticsTab() {
+        const maxScore = state.currentRubric
+            ? state.currentRubric.criteria.reduce((s, c) => s + c.maxScore, 0)
+            : 0;
+
+        const marked = state.studentData.filter(s => s.score > 0 && !s.nonSubmission);
+        const ns     = state.studentData.filter(s => s.nonSubmission);
+        const pcts   = marked.map(s => maxScore > 0 ? (s.score / maxScore) * 100 : 0);
+
+        const set = (id, val) => { const el = document.getElementById(id); if (el) el.textContent = val; };
+
+        const withIssues = state.studentData.filter(s => (s.issues || []).some(i => !i.resolved)).length;
+        set('statTotal',  state.studentData.length || '—');
+        set('statMarked', marked.length);
+        set('statNS',     ns.length);
+        set('statIssues', withIssues);
+
+        if (pcts.length) {
+            const sorted = [...pcts].sort((a, b) => a - b);
+            const mean   = pcts.reduce((s, v) => s + v, 0) / pcts.length;
+            const mid    = Math.floor(sorted.length / 2);
+            const median = sorted.length % 2 ? sorted[mid] : (sorted[mid - 1] + sorted[mid]) / 2;
+            const sd     = Math.sqrt(pcts.reduce((s, v) => s + (v - mean) ** 2, 0) / pcts.length);
+            const pass   = getPassMark();
+            const passN  = pcts.filter(p => p >= pass).length;
+
+            set('statMean',   mean.toFixed(1) + '%');
+            set('statMedian', median.toFixed(1) + '%');
+            set('statSD',     sd.toFixed(1));
+            set('statMin',    sorted[0].toFixed(1) + '%');
+            set('statMax',    sorted[sorted.length - 1].toFixed(1) + '%');
+            set('statPass',   passN + ' / ' + marked.length + ' (' + ((passN / marked.length) * 100).toFixed(0) + '%)');
+            const passLbl = document.getElementById('statPassLbl');
+            if (passLbl) passLbl.textContent = `Pass Rate (≥${pass}%)`;
+        } else {
+            ['statMean','statMedian','statSD','statMin','statMax','statPass'].forEach(id => set(id, '—'));
+        }
+
+        // Grade distribution chart — bands adjust to pass mark
+        const pass = getPassMark();
+        const cleanBands = [
+            { label: `Distinction (70–100%)`,               cls: 'bar-distinction',  min: 70,     max: 101   },
+            { label: `Merit (60–69%)`,                       cls: 'bar-commendation', min: 60,     max: 70    },
+            { label: `Pass (${pass}–59%)`,                   cls: 'bar-merit',        min: pass,   max: 60    },
+            { label: `Condoned Fail (${pass-5}–${pass-0.1}%)`, cls: 'bar-borderline',min: pass-5, max: pass  },
+            { label: `Fail (0–${(pass-5-0.01).toFixed(0)}%)`, cls: 'bar-fail',       min: 0,      max: pass-5},
+            { label: 'Non-Submission',                       cls: 'bar-ns',           min: -1,     max: -1    },
+        ];
+
+        const chart = document.getElementById('gradeChart');
+        if (!chart) return;
+
+        if (!state.studentData.length) {
+            chart.innerHTML = '<p class="chart-empty">No marks data yet.</p>';
+            return;
+        }
+
+        const counts = cleanBands.map(b => {
+            if (b.min === -1) return ns.length;
+            return pcts.filter(p => p >= b.min && p < b.max).length;
+        });
+
+        const maxCount = Math.max(...counts, 1);
+
+        chart.innerHTML = cleanBands.map((b, i) => {
+            const count = counts[i];
+            const widthPct = (count / maxCount) * 100;
+            return `<div class="chart-row">
+                <div class="chart-label">${b.label}</div>
+                <div class="chart-bar-track">
+                    <div class="chart-bar-fill ${b.cls}" style="width:${widthPct}%"></div>
+                </div>
+                <div class="chart-count">${count}</div>
+            </div>`;
+        }).join('');
+
+        // Normal curve
+        if (pcts.length >= 2) {
+            const mean = pcts.reduce((s, v) => s + v, 0) / pcts.length;
+            const sd   = Math.sqrt(pcts.reduce((s, v) => s + (v - mean) ** 2, 0) / pcts.length);
+            drawNormalCurve(mean, sd, pcts);
+        } else {
+            const wrap = document.getElementById('normalCurveWrap');
+            if (wrap) wrap.innerHTML = '<p class="chart-empty">Not enough data (need ≥2 marked students).</p>';
+        }
+
+        // Boundary analysis + moderation warnings
+        renderBoundaryAnalysis(pcts);
+        renderModerationWarnings(pcts, marked);
+
+        // Restore deadline values
+        restoreDeadlines();
+    }
+
+    function renderBoundaryAnalysis(pcts) {
+        const el = document.getElementById('boundaryAnalysis');
+        if (!el) return;
+        if (!pcts.length) { el.innerHTML = '<p class="chart-empty">No marks data yet.</p>'; return; }
+
+        const pass = getPassMark();
+        const zones = [
+            { label: 'Distinction',           zone: 'distinction',            min: 70,        max: 101 },
+            { label: 'Near Distinction ▲',    zone: 'borderline-distinction', min: 68.5,      max: 70  },
+            { label: 'Merit',                 zone: 'merit',                  min: 60,        max: 68.5},
+            { label: 'Near Merit ▲',          zone: 'borderline-merit',       min: 58.5,      max: 60  },
+            { label: 'Pass',                  zone: 'pass',                   min: pass,      max: 58.5},
+            { label: 'Borderline Pass ⚠',    zone: 'borderline-pass',        min: pass-1.5,  max: pass},
+            { label: 'Condoned Fail Zone ⚠', zone: 'condoned-fail',          min: pass-5,    max: pass-1.5},
+            { label: 'Fail',                  zone: 'fail',                   min: 0,         max: pass-5},
+        ];
+
+        el.innerHTML = `<table class="boundary-table">
+            <thead><tr><th>Zone</th><th>Range</th><th>Count</th><th>Students</th></tr></thead>
+            <tbody>${zones.map(z => {
+                const students = pcts.filter(p => p >= z.min && p < z.max);
+                const n = students.length;
+                if (!n) return '';
+                const bar = `<div class="boundary-bar-fill zone-${z.zone}" style="width:${Math.max(4,(n/pcts.length)*100).toFixed(0)}%;display:inline-block;height:8px;border-radius:3px;"></div>`;
+                return `<tr>
+                    <td><span class="boundary-badge-pill zone-${z.zone}">${z.label}</span></td>
+                    <td style="color:#6b7280;font-size:9px;">${z.min.toFixed(1)}–${z.max < 101 ? z.max.toFixed(1) : '100'}%</td>
+                    <td style="font-weight:700;">${n}</td>
+                    <td>${bar} <span style="font-size:9px;color:#6b7280;">${((n/pcts.length)*100).toFixed(0)}%</span></td>
+                </tr>`;
+            }).join('')}</tbody>
+        </table>`;
+    }
+
+    function renderModerationWarnings(pcts, marked) {
+        const el = document.getElementById('moderationWarnings');
+        if (!el) return;
+        if (pcts.length < 3) { el.innerHTML = '<p class="chart-empty">Need at least 3 marked students for moderation analysis.</p>'; return; }
+
+        const warnings = [];
+        const pass = getPassMark();
+        const mean = pcts.reduce((s, v) => s + v, 0) / pcts.length;
+        const sd   = Math.sqrt(pcts.reduce((s, v) => s + (v - mean) ** 2, 0) / pcts.length);
+
+        // 1. Narrow distribution
+        if (sd < 5 && pcts.length >= 5)
+            warnings.push({ level:'warning', text: `Very narrow grade spread (SD = ${sd.toFixed(1)}%). Marks may be insufficiently differentiated — consider reviewing rubric application.` });
+
+        // 2. Wide distribution
+        if (sd > 20)
+            warnings.push({ level:'info', text: `Wide grade spread (SD = ${sd.toFixed(1)}%). Check whether assessment design or marking consistency is driving this variation.` });
+
+        // 3. Grade clustering — detect any 3% band with ≥25% of cohort
+        for (let band = 0; band <= 97; band += 1) {
+            const inBand = pcts.filter(p => p >= band && p < band + 3).length;
+            if (inBand >= Math.max(3, pcts.length * 0.25)) {
+                warnings.push({ level:'warning', text: `Grade clustering detected: ${inBand} students (${((inBand/pcts.length)*100).toFixed(0)}%) are concentrated in the ${band.toFixed(0)}–${(band+3).toFixed(0)}% range.` });
+                break;
+            }
+        }
+
+        // 4. Many borderline fails (condoned zone)
+        const condonedN = pcts.filter(p => p >= pass - 5 && p < pass - 1.5).length;
+        if (condonedN >= 3)
+            warnings.push({ level:'warning', text: `${condonedN} students fall within the condoned fail zone (${(pass-5).toFixed(0)}–${(pass-1.5).toFixed(0)}%). Board attention required.` });
+
+        // 5. High fail rate
+        const failN = pcts.filter(p => p < pass).length;
+        const failPct = (failN / pcts.length) * 100;
+        if (failPct > 30)
+            warnings.push({ level:'critical', text: `High failure rate: ${failN} students (${failPct.toFixed(0)}%) are below the pass threshold (${pass}%). Review assessment difficulty and support provision.` });
+
+        // 6. Very low mean
+        if (mean < pass + 5)
+            warnings.push({ level:'info', text: `Cohort mean (${mean.toFixed(1)}%) is close to the pass threshold. Consider whether assessment standards are appropriately calibrated.` });
+
+        // 7. Borderline pass cluster
+        const bpN = pcts.filter(p => p >= pass - 1.5 && p < pass).length;
+        if (bpN >= 3)
+            warnings.push({ level:'info', text: `${bpN} students are borderline pass (within 1.5 marks of threshold). Individual review recommended before board.` });
+
+        if (!warnings.length) {
+            el.innerHTML = '<div class="mod-warning mod-ok">✅ No significant moderation concerns detected.</div>';
+            return;
+        }
+        el.innerHTML = warnings.map(w =>
+            `<div class="mod-warning mod-${w.level}">${w.level === 'critical' ? '🔴' : w.level === 'warning' ? '🟠' : 'ℹ️'} ${w.text}</div>`
+        ).join('');
+    }
+
+    // ── Normal distribution curve (SVG) ──────────────────────────────────
+    function drawNormalCurve(mean, sd, pcts) {
+        const wrap = document.getElementById('normalCurveWrap');
+        if (!wrap) return;
+        if (sd === 0 || pcts.length < 2) {
+            wrap.innerHTML = '<p class="chart-empty">Not enough data for a curve (need ≥2 marked students).</p>';
+            return;
+        }
+        const W = 520, H = 200, PAD = 36;
+        const xMin = 0, xMax = 100;
+        const toX = v => PAD + (v / 100) * (W - PAD * 2);
+
+        // Bell curve: normal PDF
+        const pdf = x => Math.exp(-0.5 * ((x - mean) / sd) ** 2) / (sd * Math.sqrt(2 * Math.PI));
+        const points = [];
+        for (let x = xMin; x <= xMax; x += 0.5) points.push({ x, y: pdf(x) });
+        const maxY = Math.max(...points.map(p => p.y));
+        const toY  = v => H - PAD - (v / maxY) * (H - PAD * 2);
+
+        const pathD = points.map((p, i) => `${i === 0 ? 'M' : 'L'} ${toX(p.x).toFixed(1)} ${toY(p.y).toFixed(1)}`).join(' ');
+
+        // ±2SD zone fill (light purple)
+        const fillPoints = points.filter(p => p.x >= mean - 2 * sd && p.x <= mean + 2 * sd);
+        const fillD = fillPoints.length
+            ? `M ${toX(fillPoints[0].x)} ${toY(0)} ` +
+              fillPoints.map(p => `L ${toX(p.x).toFixed(1)} ${toY(p.y).toFixed(1)}`).join(' ') +
+              ` L ${toX(fillPoints[fillPoints.length - 1].x)} ${toY(0)} Z`
+            : '';
+
+        // Fail zone fill (light red left of pass threshold)
+        const pass     = getPassMark();
+        const failPts  = points.filter(p => p.x <= pass);
+        const failFill = failPts.length
+            ? `M ${toX(failPts[0].x)} ${toY(0)} ` +
+              failPts.map(p => `L ${toX(p.x).toFixed(1)} ${toY(p.y).toFixed(1)}`).join(' ') +
+              ` L ${toX(pass)} ${toY(0)} Z`
+            : '';
+
+        // Student score dots (scatter along bottom axis)
+        const dots = pcts.map(p =>
+            `<circle cx="${toX(p).toFixed(1)}" cy="${(toY(0) + 10).toFixed(1)}" r="3" fill="#5D3B8E" opacity="0.55"/>`
+        ).join('');
+
+        // Vertical line helper
+        const vLine = (x, color, dash, w = '1.5') =>
+            `<line x1="${toX(x).toFixed(1)}" y1="${toY(maxY * 1.02).toFixed(1)}" x2="${toX(x).toFixed(1)}" y2="${(toY(0) + 15).toFixed(1)}" stroke="${color}" stroke-width="${w}" stroke-dasharray="${dash}" opacity="0.85"/>`;
+
+        // Axis tick labels
+        const axisLabels = [0, pass, 50, 60, 70, 80, 100]
+            .filter((v, i, arr) => arr.indexOf(v) === i && v <= 100)
+            .map(v => {
+                const bold = v === pass ? 'font-weight="bold"' : '';
+                const fill = v === pass ? '#dc2626' : '#6b7280';
+                return `<text x="${toX(v).toFixed(1)}" y="${(H - 4).toFixed(1)}" text-anchor="middle" font-size="8" fill="${fill}" ${bold}>${v}%</text>`;
+            }).join('');
+
+        // Legend items
+        const legendX = W - 128;
+        const legend = `
+            <rect x="${legendX}" y="8" width="9" height="9" fill="#ede9fe" stroke="#9333ea" stroke-width="1"/>
+            <text x="${legendX + 13}" y="17" font-size="8" fill="#6b7280">±2 SD range</text>
+            <rect x="${legendX}" y="22" width="9" height="9" fill="#fee2e2" opacity="0.6"/>
+            <text x="${legendX + 13}" y="31" font-size="8" fill="#6b7280">Fail zone</text>
+            <circle cx="${legendX + 4}" cy="40" r="3" fill="#5D3B8E" opacity="0.6"/>
+            <text x="${legendX + 13}" y="44" font-size="8" fill="#6b7280">Student score</text>
+            <line x1="${legendX}" y1="52" x2="${legendX + 9}" y2="52" stroke="#dc2626" stroke-width="1.5" stroke-dasharray="4 2"/>
+            <text x="${legendX + 13}" y="56" font-size="8" fill="#6b7280">Pass threshold (${pass}%)</text>`;
+
+        wrap.innerHTML = `<svg viewBox="0 0 ${W} ${H + 16}" class="normal-curve-svg" xmlns="http://www.w3.org/2000/svg">
+            <!-- fail zone fill -->
+            <path d="${failFill}" fill="#fee2e2" opacity="0.45"/>
+            <!-- ±2SD fill -->
+            <path d="${fillD}" fill="#ede9fe" opacity="0.45"/>
+            <!-- bell curve -->
+            <path d="${pathD}" fill="none" stroke="#5D3B8E" stroke-width="2.5"/>
+            <!-- pass threshold line -->
+            ${pass <= 100 ? vLine(pass, '#dc2626', '5 3', '2') : ''}
+            <!-- mean line -->
+            ${vLine(mean, '#5D3B8E', '0', '2')}
+            <!-- ±1SD lines -->
+            ${mean - sd >= 0   ? vLine(mean - sd, '#9333ea', '4 3') : ''}
+            ${mean + sd <= 100 ? vLine(mean + sd, '#9333ea', '4 3') : ''}
+            <!-- student score dots -->
+            ${dots}
+            <!-- x axis -->
+            <line x1="${toX(0).toFixed(1)}" y1="${(toY(0) + 15).toFixed(1)}" x2="${toX(100).toFixed(1)}" y2="${(toY(0) + 15).toFixed(1)}" stroke="#d1d5db" stroke-width="1"/>
+            <!-- axis labels -->
+            ${axisLabels}
+            <!-- labels: mean, ±1SD, pass -->
+            <text x="${toX(mean).toFixed(1)}" y="${toY(maxY * 1.08).toFixed(1)}" text-anchor="middle" font-size="9" fill="#5D3B8E" font-weight="bold">μ=${mean.toFixed(1)}%</text>
+            ${mean - sd >= 0   ? `<text x="${toX(mean-sd).toFixed(1)}" y="${toY(maxY*1.08).toFixed(1)}" text-anchor="middle" font-size="7.5" fill="#9333ea">−1σ</text>` : ''}
+            ${mean + sd <= 100 ? `<text x="${toX(mean+sd).toFixed(1)}" y="${toY(maxY*1.08).toFixed(1)}" text-anchor="middle" font-size="7.5" fill="#9333ea">+1σ</text>` : ''}
+            <text x="${toX(pass).toFixed(1)}" y="${toY(maxY * 1.08).toFixed(1)}" text-anchor="middle" font-size="8" fill="#dc2626" font-weight="bold">Pass</text>
+            <!-- legend -->
+            ${legend}
+        </svg>`;
+    }
+
+    // ── Deadline countdown helpers ────────────────────────────────────────
+    function updateDeadlineChip(inputId, dateStr) {
+        const chipId = inputId + 'Chip';
+        const chip = document.getElementById(chipId);
+        if (!chip) return;
+        if (!dateStr) { chip.textContent = ''; chip.className = 'deadline-countdown'; return; }
+        const days = Math.ceil((new Date(dateStr) - new Date()) / 86400000);
+        let cls = 'deadline-countdown';
+        let text = '';
+        if (days < 0)      { cls += ' dl-overdue'; text = `Overdue by ${Math.abs(days)}d`; }
+        else if (days === 0) { cls += ' dl-urgent';  text = 'Due today!'; }
+        else if (days <= 3)  { cls += ' dl-urgent';  text = `${days}d left`; }
+        else if (days <= 7)  { cls += ' dl-soon';    text = `${days}d left`; }
+        else                 { cls += ' dl-ok';       text = `${days}d left`; }
+        chip.className = cls;
+        chip.textContent = text;
+    }
+
+    function restoreDeadlines() {
+        const map = { dlSubmission:'submission', dlMarking:'marking', dlModeration:'moderation', dlFeedback:'feedback' };
+        Object.entries(map).forEach(([id, key]) => {
+            const el = document.getElementById(id);
+            if (el && state.deadlines[key]) {
+                el.value = state.deadlines[key];
+                updateDeadlineChip(id, state.deadlines[key]);
+            }
+        });
+    }
+
+    // ── Task detail modal ─────────────────────────────────────────────────
+    function openTaskDetail(idx) {
+        const task = state.moduleTasks[idx];
+        if (!task) return;
+        state._taskDetailIndex = idx;
+        const setVal = (id, v) => { const el = document.getElementById(id); if (el) el.value = v || ''; };
+        setVal('tdTitle', task.title);
+        setVal('tdPriority', task.priority);
+        setVal('tdStatus', task.status);
+        setVal('tdDeadline', task.deadline);
+        setVal('tdDescription', task.description);
+        renderTaskNotes(task);
+        document.getElementById('taskDetailModal').style.display = 'flex';
+    }
+
+    function closeTaskDetail() {
+        document.getElementById('taskDetailModal').style.display = 'none';
+        state._taskDetailIndex = -1;
+    }
+
+    function saveTaskDetail() {
+        const idx = state._taskDetailIndex;
+        if (idx < 0 || !state.moduleTasks[idx]) return;
+        const task = state.moduleTasks[idx];
+        task.title       = document.getElementById('tdTitle')?.value.trim() || task.title;
+        task.priority    = document.getElementById('tdPriority')?.value || task.priority;
+        task.status      = document.getElementById('tdStatus')?.value || task.status;
+        task.deadline    = document.getElementById('tdDeadline')?.value || '';
+        task.description = document.getElementById('tdDescription')?.value.trim() || '';
+        closeTaskDetail();
+        renderModuleTasksSection();
+    }
+
+    function deleteTaskFromDetail() {
+        const idx = state._taskDetailIndex;
+        if (idx < 0) return;
+        if (!confirm('Delete this task?')) return;
+        state.moduleTasks.splice(idx, 1);
+        closeTaskDetail();
+        renderModuleTasksSection();
+    }
+
+    function addNoteToTask() {
+        const idx = state._taskDetailIndex;
+        const task = state.moduleTasks[idx];
+        if (!task) return;
+        const noteEl = document.getElementById('tdNewNote');
+        const text = noteEl?.value.trim();
+        if (!text) return;
+        if (!task.notes) task.notes = [];
+        task.notes.push({ text, ts: new Date().toLocaleString() });
+        noteEl.value = '';
+        renderTaskNotes(task);
+    }
+
+    function renderTaskNotes(task) {
+        const list = document.getElementById('tdNotesList');
+        if (!list) return;
+        const notes = task.notes || [];
+        list.innerHTML = notes.length
+            ? notes.map(n => `<div class="td-note-item"><span class="td-note-ts">${n.ts}</span><p>${n.text}</p></div>`).join('')
+            : '<p class="no-issues-msg" style="padding:6px 0">No notes yet.</p>';
+    }
+
+    // ── Issues badge ──────────────────────────────────────────────────────
+    function updateIssuesBadge() {
+        if (state.currentStudentIndex < 0) {
+            if (elements.issuesBadge) elements.issuesBadge.style.display = 'none';
+            return;
+        }
+        const student = state.studentData[state.currentStudentIndex];
+        const open = (student?.issues || []).filter(i => !i.resolved).length;
+        if (elements.issuesBadge) {
+            elements.issuesBadge.textContent = open;
+            elements.issuesBadge.style.display = open > 0 ? 'inline' : 'none';
+        }
+    }
+
+    // ── Issues modal ──────────────────────────────────────────────────────
+    function openIssuesModal(targetIndex) {
+        const idx = typeof targetIndex === 'number' ? targetIndex : state.currentStudentIndex;
+        if (idx < 0) return;
+        const student = state.studentData[idx];
+        if (!student) return;
+        state._issuesTargetIndex = idx;
+        if (elements.issuesModalStudent)
+            elements.issuesModalStudent.textContent = `— ${student.id} · ${student.name}`;
+        if (elements.issueType) elements.issueType.value = 'general';
+        if (elements.misconductPanel) elements.misconductPanel.style.display = 'none';
+        if (elements.issueText) elements.issueText.value = '';
+        renderIssuesList(student);
+        if (elements.issuesModal) elements.issuesModal.style.display = 'flex';
+    }
+
+    function closeIssuesModal() {
+        if (elements.issuesModal) elements.issuesModal.style.display = 'none';
+        state._issuesTargetIndex = null;
+    }
+
+    function renderIssuesList(student) {
+        if (!elements.issuesList) return;
+        const issues = student.issues || [];
+        if (!issues.length) {
+            elements.issuesList.innerHTML = '<p class="no-issues-msg">No issues recorded for this student.</p>';
+            return;
+        }
+        const typeLabels = {
+            general: ['📝 Note', 'type-general'],
+            misconduct: ['⚠️ Misconduct', 'type-misconduct'],
+            missing: ['📭 Missing', 'type-missing'],
+            query: ['❓ Query', 'type-query'],
+            other: ['🔖 Other', 'type-other'],
+        };
+        elements.issuesList.innerHTML = issues.map((issue, i) => {
+            const [label, cls] = typeLabels[issue.type] || ['🔖 Other', 'type-other'];
+            return `<div class="issue-item ${issue.resolved ? 'resolved' : ''}">
+                <span class="issue-type-badge ${cls}">${label}</span>
+                <div class="issue-text">
+                    <div>${issue.text}</div>
+                    <div class="issue-date">${issue.date}</div>
+                </div>
+                <div class="issue-actions">
+                    <button class="btn-resolve ${issue.resolved ? 'resolved' : ''}"
+                        onclick="window._resolveIssue(${i})">${issue.resolved ? 'Reopen' : 'Resolve'}</button>
+                    <button class="btn-delete-issue" onclick="window._deleteIssue(${i})">✕</button>
+                </div>
+            </div>`;
+        }).join('');
+    }
+
+    function addIssue() {
+        const idx = state._issuesTargetIndex ?? state.currentStudentIndex;
+        const student = state.studentData[idx];
+        if (!student) return;
+        const text = elements.issueText?.value.trim();
+        if (!text) { alert('Please enter a description.'); return; }
+        if (!student.issues) student.issues = [];
+        student.issues.push({
+            id: Date.now(),
+            type: elements.issueType?.value || 'general',
+            text,
+            date: new Date().toLocaleDateString(),
+            resolved: false,
+        });
+        if (elements.issueText) elements.issueText.value = '';
+        renderIssuesList(student);
+        updateIssuesBadge();
+        updateStudentOptionLabel(idx);
+        if (document.getElementById('tab-issues')?.style.display !== 'none') renderIssuesTab();
+    }
+
+    // Exposed globally so inline onclick in rendered HTML can call them
+    window._resolveIssue = function(issueIndex) {
+        const idx = state._issuesTargetIndex ?? state.currentStudentIndex;
+        const student = state.studentData[idx];
+        if (!student?.issues?.[issueIndex]) return;
+        student.issues[issueIndex].resolved = !student.issues[issueIndex].resolved;
+        renderIssuesList(student);
+        updateIssuesBadge();
+        updateStudentOptionLabel(idx);
+    };
+
+    window._deleteIssue = function(issueIndex) {
+        const idx = state._issuesTargetIndex ?? state.currentStudentIndex;
+        const student = state.studentData[idx];
+        if (!student?.issues) return;
+        student.issues.splice(issueIndex, 1);
+        renderIssuesList(student);
+        updateIssuesBadge();
+        updateStudentOptionLabel(idx);
+    };
+
+    // ── Context menu (right-click on student rows) ────────────────────────
+    let _ctxStudentIndex = -1;
+
+    function showContextMenu(event, studentIndex) {
+        event.preventDefault();
+        _ctxStudentIndex = studentIndex;
+        const menu = document.getElementById('contextMenu');
+        if (!menu) return;
+        menu.style.display = 'block';
+        // Position, keeping within viewport
+        const x = Math.min(event.clientX, window.innerWidth - menu.offsetWidth - 8);
+        const y = Math.min(event.clientY, window.innerHeight - menu.offsetHeight - 8);
+        menu.style.left = x + 'px';
+        menu.style.top  = y + 'px';
+    }
+
+    function hideContextMenu() {
+        const menu = document.getElementById('contextMenu');
+        if (menu) menu.style.display = 'none';
+    }
+
+    function initContextMenuActions() {
+        document.getElementById('ctxOpenMark')?.addEventListener('click', () => {
+            if (_ctxStudentIndex < 0) return;
+            if (state.currentStudentIndex >= 0) saveStudentFeedback();
+            state.currentStudentIndex = _ctxStudentIndex;
+            elements.studentSelect.value = _ctxStudentIndex;
+            loadStudentFeedback();
+            switchTab('mark');
+        });
+        document.getElementById('ctxAddIssue')?.addEventListener('click', () => {
+            openIssuesModal(_ctxStudentIndex);
+        });
+        document.getElementById('ctxMisconduct')?.addEventListener('click', e => {
+            if (e.target.classList.contains('ctx-ext-link')) return;
+            state._issuesTargetIndex = _ctxStudentIndex;
+            if (elements.issueType) elements.issueType.value = 'misconduct';
+            if (elements.misconductPanel) elements.misconductPanel.style.display = 'flex';
+            openIssuesModal(_ctxStudentIndex);
+        });
+        document.getElementById('ctxToggleNS')?.addEventListener('click', () => {
+            if (_ctxStudentIndex < 0) return;
+            if (state.currentStudentIndex >= 0) saveStudentFeedback();
+            state.currentStudentIndex = _ctxStudentIndex;
+            elements.studentSelect.value = _ctxStudentIndex;
+            loadStudentFeedback();
+            if (elements.statusSelect) {
+                elements.statusSelect.value = elements.statusSelect.value === 'ns' ? 'registered' : 'ns';
+                handleStatusChange();
+            }
+            switchTab('mark');
+        });
+    }
+
+    const STATUS_PREFIX = {
+        ns: '[NS]', withdrawn: '[WD]', loa: '[LOA]', suspended: '[SUS]',
+        resit: '[RST]', repeat: '[RPT]', ec_approved: '[EC✓]', ec_pending: '[EC?]',
+        am_investigation: '[AM⚠]', deferred: '[DEF]', registered: ''
+    };
+
+    function updateStudentOptionLabel(index) {
+        const student = state.studentData[index];
+        if (!student) return;
+        const option = elements.studentSelect?.querySelector(`option[value="${index}"]`);
+        if (!option) return;
+        const openIssues = (student.issues || []).filter(i => !i.resolved).length;
+        const flag = openIssues > 0 ? ' 🚩' : '';
+        const prefix = STATUS_PREFIX[student.status || 'registered'] || '';
+        const prefixStr = prefix ? `${prefix} ` : '';
+        option.textContent = `${prefixStr}${student.id} - ${student.name}${flag}`;
+        option.classList.toggle('ns-option', NS_LIKE_STATUSES.has(student.status));
+    }
+
+    // ── Issues tab sub-tab switching ──────────────────────────────────────
+    function switchIssuesSubtab(name) {
+        document.querySelectorAll('.issues-subtab').forEach(b => b.classList.remove('active'));
+        document.querySelector(`.issues-subtab[data-subtab="${name}"]`)?.classList.add('active');
+        document.getElementById('subtab-student-issues').style.display = name === 'student-issues' ? 'flex' : 'none';
+        document.getElementById('subtab-module-tasks').style.display   = name === 'module-tasks'   ? 'flex' : 'none';
+        if (name === 'module-tasks') renderModuleTasksSection();
+    }
+
+    // ── Module Tasks (split panel) ────────────────────────────────────────
+    let _selectedTaskIdx = -1;
+
+    function addModuleTask() {
+        const title = document.getElementById('taskTitle')?.value.trim();
+        if (!title) { alert('Please enter a task title.'); return; }
+        state.moduleTasks.push({
+            id: Date.now(),
+            title,
+            description: document.getElementById('taskDescription')?.value.trim() || '',
+            priority: document.getElementById('taskPriority')?.value || 'medium',
+            deadline: document.getElementById('taskDeadline')?.value || '',
+            status: 'open',
+            created: new Date().toLocaleDateString(),
+        });
+        document.getElementById('taskTitle').value = '';
+        document.getElementById('taskDescription').value = '';
+        document.getElementById('taskDeadline').value = '';
+        renderModuleTasksSection();
+        saveToLocalStorage();
+    }
+
+    function renderModuleTasksSection() {
+        const inner = document.getElementById('tasksListInner');
+        if (!inner) return;
+
+        if (!state.moduleTasks.length) {
+            inner.innerHTML = '<div class="task-list-empty">No tasks yet — add one above.</div>';
+            clearTaskDetail();
+            return;
+        }
+
+        const pIcon = { low: '🟢', medium: '🟡', high: '🟠', urgent: '🔴' };
+        inner.innerHTML = state.moduleTasks.map((task, i) => {
+            const deadlineStr = task.deadline ? ` · ${task.deadline}` : '';
+            const active    = i === _selectedTaskIdx ? ' task-item-active' : '';
+            const resolved  = task.status === 'resolved' ? ' task-item-resolved' : '';
+            return `<div class="task-list-item${active}${resolved}" data-task-idx="${i}">
+                <div class="task-item-title">${pIcon[task.priority] || '🟡'} ${task.title}</div>
+                <div class="task-item-meta">
+                  <span>${task.status}</span>
+                  <span>${deadlineStr}</span>
+                </div>
+            </div>`;
+        }).join('');
+
+        inner.querySelectorAll('.task-list-item').forEach(item => {
+            item.addEventListener('click', () => selectTask(parseInt(item.dataset.taskIdx)));
+        });
+
+        // Re-populate detail panel for selected task (preserves editing state across re-renders)
+        if (_selectedTaskIdx >= 0 && _selectedTaskIdx < state.moduleTasks.length) {
+            selectTask(_selectedTaskIdx);
+        } else {
+            clearTaskDetail();
+        }
+    }
+
+    function selectTask(idx) {
+        _selectedTaskIdx = idx;
+        const task = state.moduleTasks[idx];
+        if (!task) return;
+
+        // Highlight selected item
+        document.querySelectorAll('.task-list-item').forEach(item => {
+            item.classList.toggle('task-item-active', parseInt(item.dataset.taskIdx) === idx);
+        });
+
+        document.getElementById('tasksDetailEmpty').style.display = 'none';
+        const content = document.getElementById('tasksDetailContent');
+        if (!content) return;
+        content.style.display = 'flex';
+        content.style.flexDirection = 'column';
+
+        const setVal = (id, v) => { const el = document.getElementById(id); if (el) el.value = v || ''; };
+        document.getElementById('tdInlineHeaderTitle').textContent = task.title || 'Task Detail';
+        setVal('tdInlineTitle',       task.title);
+        setVal('tdInlinePriority',    task.priority);
+        setVal('tdInlineStatus',      task.status);
+        setVal('tdInlineDeadline',    task.deadline);
+        setVal('tdInlineDescription', task.description);
+        renderInlineTaskNotes(task);
+    }
+
+    function clearTaskDetail() {
+        _selectedTaskIdx = -1;
+        const empty = document.getElementById('tasksDetailEmpty');
+        const content = document.getElementById('tasksDetailContent');
+        if (empty)   empty.style.display = 'flex';
+        if (content) content.style.display = 'none';
+    }
+
+    function saveTaskInline() {
+        const idx = _selectedTaskIdx;
+        if (idx < 0 || !state.moduleTasks[idx]) return;
+        const task = state.moduleTasks[idx];
+        task.title       = document.getElementById('tdInlineTitle')?.value.trim()       || task.title;
+        task.priority    = document.getElementById('tdInlinePriority')?.value           || task.priority;
+        task.status      = document.getElementById('tdInlineStatus')?.value             || task.status;
+        task.deadline    = document.getElementById('tdInlineDeadline')?.value           || '';
+        task.description = document.getElementById('tdInlineDescription')?.value.trim() || '';
+        renderModuleTasksSection();
+        saveToLocalStorage();
+    }
+
+    function deleteTaskInline() {
+        const idx = _selectedTaskIdx;
+        if (idx < 0) return;
+        if (!confirm('Delete this task?')) return;
+        state.moduleTasks.splice(idx, 1);
+        _selectedTaskIdx = -1;
+        renderModuleTasksSection();
+    }
+
+    function addNoteInline() {
+        const idx = _selectedTaskIdx;
+        const task = state.moduleTasks[idx];
+        if (!task) return;
+        const text = document.getElementById('tdInlineNoteText')?.value.trim();
+        if (!text) return;
+        if (!task.notes) task.notes = [];
+        task.notes.push({
+            text,
+            type:   document.getElementById('tdInlineNoteType')?.value || 'note',
+            author: document.getElementById('markerName')?.value.trim() || 'Marker',
+            date:   new Date().toLocaleString('en-GB', { day:'2-digit', month:'short', hour:'2-digit', minute:'2-digit' })
+        });
+        document.getElementById('tdInlineNoteText').value = '';
+        renderInlineTaskNotes(task);
+        saveToLocalStorage();
+    }
+
+    function renderInlineTaskNotes(task) {
+        const list = document.getElementById('tdInlineNotesList');
+        if (!list) return;
+        const notes = task.notes || [];
+        if (!notes.length) {
+            list.innerHTML = '<div class="notes-empty">No notes yet.</div>';
+            return;
+        }
+        const icon = { note: '📝', email: '📧', meeting: '🤝', action: '✅' };
+        list.innerHTML = [...notes].reverse().map(n => `
+            <div class="note-entry">
+                <div class="note-meta">${icon[n.type] || '📝'} <strong>${n.author}</strong> · ${n.date}</div>
+                <div class="note-text">${n.text}</div>
+            </div>`).join('');
+    }
+
+    window._setTaskStatus = function(i, status) {
+        if (state.moduleTasks[i]) { state.moduleTasks[i].status = status; renderModuleTasksSection(); }
+    };
+    window._deleteTask = function(i) {
+        state.moduleTasks.splice(i, 1);
+        renderModuleTasksSection();
+    };
+
+    // ── localStorage session persistence ─────────────────────────────────
+    const LS_KEY = 'markingApp_v2_session';
+
+    function saveToLocalStorage() {
+        try {
+            const snapshot = {
+                studentData:   state.studentData,
+                moduleTasks:   state.moduleTasks,
+                deadlines:     state.deadlines,
+                settings:      state.settings,
+                savedAt:       new Date().toISOString(),
+                rubricMetadata: state.currentRubric?.metadata || null,
+            };
+            localStorage.setItem(LS_KEY, JSON.stringify(snapshot));
+        } catch (e) {
+            // localStorage quota exceeded or unavailable — silently ignore
+        }
+    }
+
+    function loadFromLocalStorage() {
+        try {
+            const raw = localStorage.getItem(LS_KEY);
+            if (!raw) return;
+            const snap = JSON.parse(raw);
+            if (!snap?.studentData?.length) return;
+
+            const banner = document.getElementById('sessionRestoreBanner');
+            const info   = document.getElementById('sessionRestoreInfo');
+            if (banner && info) {
+                const dt = new Date(snap.savedAt);
+                const mod = snap.rubricMetadata?.module_code || 'unknown module';
+                info.textContent = `${snap.studentData.length} students · ${mod} · saved ${dt.toLocaleString('en-GB', {day:'2-digit', month:'short', hour:'2-digit', minute:'2-digit'})}`;
+                banner.style.display = 'flex';
+
+                document.getElementById('sessionRestoreBtn')?.addEventListener('click', () => {
+                    state.studentData = snap.studentData;
+                    state.moduleTasks = snap.moduleTasks || [];
+                    state.deadlines   = snap.deadlines   || state.deadlines;
+                    if (snap.settings) {
+                        state.settings = snap.settings;
+                        const lvlSel = document.getElementById('programmeLevelSelect');
+                        if (lvlSel) lvlSel.value = snap.settings.programmeLevel || 'msc';
+                        const cpEl = document.getElementById('customPassMark');
+                        if (cpEl) cpEl.value = snap.settings.customPassMark || 50;
+                        const customRow = document.getElementById('customPassMarkRow');
+                        if (customRow) customRow.style.display = snap.settings.programmeLevel === 'custom' ? 'flex' : 'none';
+                    }
+                    populateStudentSelect();
+                    populateQuickIssueSelect();
+                    updateProgressIndicator();
+                    banner.style.display = 'none';
+                    const chip = elements.studentStatusChip;
+                    if (chip) { chip.textContent = `${state.studentData.length} students`; chip.className = 'status-chip chip-students'; }
+                    alert(`Session restored: ${snap.studentData.length} students loaded.`);
+                });
+                document.getElementById('sessionDismissBtn')?.addEventListener('click', () => {
+                    banner.style.display = 'none';
+                });
+            }
+        } catch (e) {
+            // Corrupt data — silently ignore
+        }
+    }
+
+    function populateStudentSelect() {
+        const sel = elements.studentSelect;
+        if (!sel) return;
+        sel.innerHTML = '<option value="">Select Student</option>';
+        state.studentData.forEach((s, i) => {
+            const opt = document.createElement('option');
+            opt.value = i;
+            opt.textContent = `${s.id} - ${s.name}`;
+            sel.appendChild(opt);
+        });
+        sel.disabled = false;
+        if (elements.prevStudent) elements.prevStudent.disabled = false;
+        if (elements.nextStudent) elements.nextStudent.disabled = false;
+        if (elements.statusSelect) elements.statusSelect.disabled = false;
+        if (elements.issuesBtn)    elements.issuesBtn.disabled    = false;
+        state.studentData.forEach((_, i) => updateStudentOptionLabel(i));
+    }
+
+    // ── Keyboard shortcuts ────────────────────────────────────────────────
+    function setupKeyboardShortcuts() {
+        document.addEventListener('keydown', e => {
+            const tag = document.activeElement?.tagName;
+            const inInput = ['INPUT','TEXTAREA','SELECT'].includes(tag);
+
+            // Ctrl+S → Save to Excel
+            if (e.ctrlKey && e.key === 's') {
+                e.preventDefault();
+                saveToExcel();
+                return;
+            }
+            // Ctrl+M → Mark tab
+            if (e.ctrlKey && e.key === 'm') {
+                e.preventDefault();
+                switchTab('mark');
+                return;
+            }
+            // Ctrl+Shift+S → save student manually
+            if (e.ctrlKey && e.shiftKey && e.key === 'S') {
+                e.preventDefault();
+                if (state.currentStudentIndex >= 0) saveStudentFeedback();
+                return;
+            }
+
+            if (inInput) return; // don't steal arrow keys from inputs
+
+            // Left / Right arrows → navigate students
+            if (e.key === 'ArrowLeft')  { navigateStudent(-1); return; }
+            if (e.key === 'ArrowRight') { navigateStudent(1);  return; }
+        });
+    }
+
+    // ── Student search/filter ─────────────────────────────────────────────
+    function setupStudentSearch() {
+        const input = document.getElementById('studentSearch');
+        if (!input) return;
+        input.addEventListener('input', () => {
+            const q = input.value.toLowerCase().trim();
+            const rows = document.querySelectorAll('#studentsTableBody tr[data-index]');
+            rows.forEach(row => {
+                const text = row.textContent.toLowerCase();
+                row.style.display = (!q || text.includes(q)) ? '' : 'none';
+            });
+            const emptyRow = document.getElementById('studentsSearchEmpty');
+            if (emptyRow) {
+                const anyVisible = [...rows].some(r => r.style.display !== 'none');
+                emptyRow.style.display = (!anyVisible && q) ? '' : 'none';
+            }
+        });
+    }
+
+    // ── Criteria scoring progress indicator ───────────────────────────────
+    function updateScoringProgress() {
+        const badge = document.getElementById('scoringProgressBadge');
+        if (!badge || !state.currentRubric) { if (badge) badge.style.display = 'none'; return; }
+
+        const total  = state.currentRubric.criteria.length;
+        const scored = [...document.querySelectorAll('.score-input')]
+            .filter(inp => parseFloat(inp.value) > 0).length;
+
+        badge.textContent  = `${scored}/${total} scored`;
+        badge.className    = `scoring-progress-badge ${scored === total ? 'all-scored' : scored > 0 ? 'partial-scored' : 'none-scored'}`;
+        badge.style.display = 'inline-block';
+    }
+
+    // ── Print/PDF individual feedback ─────────────────────────────────────
+    function printStudentFeedback() {
+        if (state.currentStudentIndex < 0) { alert('No student selected.'); return; }
+        saveStudentFeedback();
+        const student  = state.studentData[state.currentStudentIndex];
+        const rubric   = state.currentRubric;
+        const maxScore = rubric ? rubric.criteria.reduce((s, c) => s + c.maxScore, 0) : 0;
+        const pct      = maxScore > 0 ? ((student.score / maxScore) * 100).toFixed(1) : '0';
+        const marker   = document.getElementById('markerName')?.value.trim() || rubric?.metadata?.tutor_name || 'Marker';
+        const zone     = !student.nonSubmission && student.score > 0 ? classifyMark(parseFloat(pct)) : null;
+
+        const criteriaRows = rubric ? rubric.criteria.map((c, i) => {
+            const sc = student.rubricData?.scores?.[i] ?? 0;
+            const cc = student.rubricData?.criteriaComments?.[i] || '';
+            return `<tr><td><b>${c.title}</b>${cc ? `<br><span class="cc">${cc}</span>` : ''}</td><td style="text-align:right;font-weight:700;">${sc}/${c.maxScore}</td></tr>`;
+        }).join('') : '';
+
+        const html = `<!DOCTYPE html><html><head><meta charset="UTF-8">
+        <title>Feedback — ${student.name}</title>
+        <style>
+          body{font-family:Arial,sans-serif;font-size:11pt;margin:2cm;color:#111;}
+          h1{font-size:14pt;margin-bottom:4px;}
+          .meta{color:#555;font-size:10pt;margin-bottom:12px;}
+          table{width:100%;border-collapse:collapse;margin:10px 0;}
+          th{background:#4a1d96;color:#fff;padding:6px 8px;text-align:left;}
+          td{padding:5px 8px;border-bottom:1px solid #ddd;vertical-align:top;}
+          .cc{color:#555;font-size:9pt;}
+          .total{font-size:13pt;font-weight:700;margin:12px 0;}
+          .zone{display:inline-block;padding:3px 10px;border-radius:12px;font-size:10pt;font-weight:700;margin-left:8px;}
+          .zone-distinction{background:#fef08a;color:#713f12;}
+          .zone-merit,.zone-borderline-merit{background:#d1fae5;color:#065f46;}
+          .zone-pass,.zone-borderline-pass{background:#dbeafe;color:#1d4ed8;}
+          .zone-condoned-fail{background:#fef3c7;color:#92400e;}
+          .zone-fail{background:#fee2e2;color:#991b1b;}
+          .feedback{background:#f8f9fa;border-left:3px solid #4a1d96;padding:10px;margin-top:10px;white-space:pre-wrap;font-size:10pt;}
+          .footer{margin-top:20px;font-size:9pt;color:#999;border-top:1px solid #ddd;padding-top:8px;}
+          @media print{body{margin:1cm;}button{display:none;}}
+        </style></head><body>
+        <h1>Assessment Feedback</h1>
+        <div class="meta">
+          ${rubric?.metadata?.module_code || ''} ${rubric?.metadata?.module_title || ''}<br>
+          ${rubric?.metadata?.course_work || ''} &nbsp;·&nbsp; ${rubric?.metadata?.semester || ''}<br>
+          Student: <b>${student.name}</b> (${student.id}) &nbsp;·&nbsp; Marker: ${marker}
+        </div>
+        <table><thead><tr><th>Criterion</th><th>Score</th></tr></thead><tbody>${criteriaRows}</tbody></table>
+        <div class="total">
+          Total: ${student.nonSubmission ? 'Non-Submission' : `${student.score.toFixed(1)} / ${maxScore} = ${pct}%`}
+          ${zone ? `<span class="zone zone-${zone.zone}">${zone.label}</span>` : ''}
+        </div>
+        ${student.rubricData?.overallComments ? `<div class="feedback">${student.rubricData.overallComments}</div>` : ''}
+        <div class="footer">Provisional — subject to ratification by the Exam Board &nbsp;·&nbsp; Generated ${new Date().toLocaleDateString('en-GB', {day:'2-digit',month:'short',year:'numeric'})}</div>
+        <br><button onclick="window.print()">🖨 Print / Save as PDF</button>
+        </body></html>`;
+
+        const w = window.open('', '_blank', 'width=750,height=900');
+        if (w) { w.document.write(html); w.document.close(); }
+    }
+
+    // ── Styled HTML report (colored Excel) ───────────────────────────────
+    function exportStyledReport() {
+        if (!state.studentData.length) { alert('No student data to export.'); return; }
+        if (state.currentStudentIndex >= 0) saveStudentFeedback();
+
+        const maxScore = state.currentRubric
+            ? state.currentRubric.criteria.reduce((s, c) => s + c.maxScore, 0) : 0;
+
+        const zoneColors = {
+            'distinction':            { bg:'#fef08a', fg:'#713f12' },
+            'borderline-distinction': { bg:'#fde68a', fg:'#92400e' },
+            'merit':                  { bg:'#d1fae5', fg:'#065f46' },
+            'borderline-merit':       { bg:'#a7f3d0', fg:'#065f46' },
+            'pass':                   { bg:'#dbeafe', fg:'#1d4ed8' },
+            'borderline-pass':        { bg:'#bfdbfe', fg:'#1e40af' },
+            'condoned-fail':          { bg:'#fef3c7', fg:'#92400e' },
+            'fail':                   { bg:'#fee2e2', fg:'#991b1b' },
+        };
+
+        const critHeaders = state.currentRubric
+            ? state.currentRubric.criteria.map(c => `<th>${c.title} (/${c.maxScore})</th>`).join('')
+            : '';
+
+        const rows = state.studentData.map((student, i) => {
+            const pctNum = maxScore > 0 ? (student.score / maxScore) * 100 : 0;
+            const pct    = student.nonSubmission ? 'NS' : pctNum.toFixed(1) + '%';
+            const zone   = !student.nonSubmission && student.score > 0 ? classifyMark(pctNum) : null;
+            const zc     = zone ? zoneColors[zone.zone] : null;
+            const scoreStr = student.nonSubmission ? 'NS' : student.score.toFixed(1);
+            const zoneLabel = zone ? zone.label : (student.nonSubmission ? 'Non-Submission' : 'Not Marked');
+            const bgStyle  = zc ? `background-color:${zc.bg};color:${zc.fg};font-weight:700;` : '';
+
+            const critCells = state.currentRubric
+                ? state.currentRubric.criteria.map((_, ci) => {
+                    const sc = student.rubricData?.scores?.[ci] ?? 0;
+                    return `<td>${student.nonSubmission ? 'NS' : sc}</td>`;
+                }).join('')
+                : '';
+
+            const openIssues = (student.issues || []).filter(x => !x.resolved).length;
+
+            return `<tr>
+                <td>${i+1}</td>
+                <td>${student.id}</td>
+                <td>${student.name}</td>
+                <td>${student.status || 'registered'}</td>
+                ${critCells}
+                <td>${scoreStr}</td>
+                <td style="${bgStyle}">${pct}</td>
+                <td style="${bgStyle}">${zoneLabel}</td>
+                <td>${openIssues > 0 ? openIssues + ' open' : '—'}</td>
+            </tr>`;
+        }).join('');
+
+        const mod  = state.currentRubric?.metadata?.module_code || 'Marks';
+        const sem  = state.currentRubric?.metadata?.semester || '';
+        const date = new Date().toLocaleDateString('en-GB');
+
+        // Boundary review rows
+        const bReview = state.studentData.filter(s => {
+            if (s.nonSubmission || !s.score) return false;
+            const pctN = maxScore > 0 ? (s.score/maxScore)*100 : 0;
+            const z = classifyMark(pctN).zone;
+            return z.startsWith('borderline') || z === 'condoned-fail';
+        }).map(s => {
+            const pctN = maxScore > 0 ? (s.score/maxScore)*100 : 0;
+            const zone = classifyMark(pctN);
+            const zc   = zoneColors[zone.zone] || {};
+            return `<tr><td>${s.id}</td><td>${s.name}</td><td>${s.score.toFixed(1)}/${maxScore}</td>
+                <td style="background-color:${zc.bg||''};color:${zc.fg||''};font-weight:700;">${pctN.toFixed(1)}%</td>
+                <td style="background-color:${zc.bg||''};color:${zc.fg||''};font-weight:700;">${zone.label}</td>
+                <td>${zone.guidance || ''}</td></tr>`;
+        }).join('');
+
+        // EC students
+        const ecRows = state.studentData.filter(s => EC_STATUSES.has(s.status)).map(s => {
+            const ec = s.ecDetails || {};
+            return `<tr><td>${s.id}</td><td>${s.name}</td><td>${s.status}</td>
+                <td>${ec.type||'—'}</td><td>${ec.approvalDate||'—'}</td>
+                <td>${ec.newDeadline||'—'}</td><td>${ec.notes||''}</td></tr>`;
+        }).join('');
+
+        // Resit students
+        const resitRows = state.studentData.filter(s => RESIT_STATUSES.has(s.status)).map(s => {
+            const rs = s.resitDetails || {};
+            const pctN = maxScore > 0 ? (s.score/maxScore)*100 : 0;
+            const effPct = rs.capped ? Math.min(pctN, getPassMark()) : pctN;
+            return `<tr><td>${s.id}</td><td>${s.name}</td><td>${s.status}</td>
+                <td>${rs.previousMark||'—'}</td><td>${rs.attemptNumber||2}</td>
+                <td>${s.score.toFixed(1)}/${maxScore} (${pctN.toFixed(1)}%)</td>
+                <td>${rs.capped ? `Capped at ${getPassMark()}% → ${effPct.toFixed(1)}%` : effPct.toFixed(1)+'%'}</td></tr>`;
+        }).join('');
+
+        const html = `<html xmlns:o="urn:schemas-microsoft-com:office:office"
+                            xmlns:x="urn:schemas-microsoft-com:office:excel"
+                            xmlns="http://www.w3.org/TR/REC-html40">
+        <head><meta charset="UTF-8"><!--[if gte mso 9]><xml><x:ExcelWorkbook><x:ExcelWorksheets>
+        <x:ExcelWorksheet><x:Name>Marks</x:Name><x:WorksheetOptions><x:Selected/></x:WorksheetOptions></x:ExcelWorksheet>
+        <x:ExcelWorksheet><x:Name>Boundary Review</x:Name></x:ExcelWorksheet>
+        <x:ExcelWorksheet><x:Name>EC Students</x:Name></x:ExcelWorksheet>
+        <x:ExcelWorksheet><x:Name>Resit Students</x:Name></x:ExcelWorksheet>
+        </x:ExcelWorksheets></x:ExcelWorkbook></xml><![endif]-->
+        <style>
+          body{font-family:Calibri,Arial;font-size:10pt;}
+          th{background:#4a1d96;color:#fff;font-weight:bold;padding:4px 8px;}
+          td{padding:3px 8px;border:1px solid #ddd;}
+          .sheet{page-break-before:always;}
+          h2{font-size:12pt;color:#4a1d96;margin-bottom:4px;}
+          .meta{font-size:9pt;color:#555;margin-bottom:8px;}
+        </style></head><body>
+        <h2>${mod} — ${sem} — Marks Report</h2>
+        <div class="meta">Generated ${date} · ${state.studentData.length} students</div>
+        <table border="1">
+          <thead><tr><th>#</th><th>Student ID</th><th>Name</th><th>Status</th>${critHeaders}
+            <th>Score</th><th>%</th><th>Grade Zone</th><th>Issues</th></tr></thead>
+          <tbody>${rows}</tbody>
+        </table>
+
+        <div class="sheet" style="margin-top:30px;">
+        <h2>Boundary Review — Students Requiring Attention</h2>
+        ${bReview ? `<table border="1"><thead><tr><th>Student ID</th><th>Name</th><th>Score</th><th>%</th><th>Zone</th><th>Guidance</th></tr></thead><tbody>${bReview}</tbody></table>`
+            : '<p>No students in boundary zones.</p>'}
+        </div>
+
+        <div class="sheet" style="margin-top:30px;">
+        <h2>Exceptional Circumstances (EC) Students</h2>
+        ${ecRows ? `<table border="1"><thead><tr><th>Student ID</th><th>Name</th><th>Status</th><th>EC Type</th><th>Approval Date</th><th>New Deadline</th><th>Notes</th></tr></thead><tbody>${ecRows}</tbody></table>`
+            : '<p>No EC students recorded.</p>'}
+        </div>
+
+        <div class="sheet" style="margin-top:30px;">
+        <h2>Resit / Repeat Students</h2>
+        ${resitRows ? `<table border="1"><thead><tr><th>Student ID</th><th>Name</th><th>Status</th><th>Previous Mark</th><th>Attempt #</th><th>Current Mark</th><th>Effective Grade</th></tr></thead><tbody>${resitRows}</tbody></table>`
+            : '<p>No resit/repeat students recorded.</p>'}
+        </div>
+        </body></html>`;
+
+        const blob = new Blob([html], { type: 'application/vnd.ms-excel;charset=utf-8' });
+        const url  = URL.createObjectURL(blob);
+        const a    = document.createElement('a');
+        a.href     = url;
+        a.download = `${mod}_${new Date().toISOString().slice(0,10)}_Report.xls`;
+        a.click();
+        URL.revokeObjectURL(url);
+    }
+
+    // ── Enhanced Excel export (XLSX multi-sheet) ──────────────────────────
+    // (Overrides saveToExcel — adds more sheets)
+    async function saveToExcel() {
+        try {
+            if (!state.studentData.length) throw new Error('No student data to save');
+            if (state.currentStudentIndex >= 0) saveStudentFeedback();
+
+            const maxScore = state.currentRubric
+                ? state.currentRubric.criteria.reduce((s, c) => s + c.maxScore, 0) : 0;
+            const pass = getPassMark();
+
+            // ── Sheet 1: Marks ─────────────────────────────────────────────
+            const marksRows = state.studentData.map((student, i) => {
+                const pctNum = maxScore > 0 ? (student.score / maxScore) * 100 : 0;
+                const pct    = student.nonSubmission ? 'NS' : pctNum.toFixed(1) + '%';
+                const zone   = !student.nonSubmission && student.score > 0 ? classifyMark(pctNum).label : '—';
+                const row = { '#': i + 1, 'Student ID': student.id, 'Name': student.name,
+                    'Student Status': student.status || 'registered',
+                    'Marking Status': student.nonSubmission ? 'Non-Submission' : (student.score > 0 ? 'Marked' : 'Not Marked') };
+                if (state.currentRubric) {
+                    state.currentRubric.criteria.forEach((crit, idx) => {
+                        const score = student.rubricData?.scores?.[idx] ?? 0;
+                        row[`${crit.title} (/${crit.maxScore})`] = student.nonSubmission ? 'NS' : score;
+                    });
+                }
+                row['Total Score']      = student.nonSubmission ? 'NS' : (student.score || 0);
+                row['Max Score']        = maxScore;
+                row['Percentage']       = pct;
+                row['Grade Zone']       = zone;
+                row['Overall Comments'] = student.rubricData?.overallComments || '';
+                const openIssues = (student.issues || []).filter(i => !i.resolved);
+                row['Open Issues']      = openIssues.length > 0 ? openIssues.map(x => `[${x.type.toUpperCase()}] ${x.text}`).join(' | ') : '';
+                return row;
+            });
+
+            // ── Sheet 2: Summary statistics ────────────────────────────────
+            const marked = state.studentData.filter(s => s.score > 0 && !s.nonSubmission);
+            const pcts   = marked.map(s => maxScore > 0 ? (s.score / maxScore) * 100 : 0);
+            const mean   = pcts.length ? pcts.reduce((a, b) => a + b, 0) / pcts.length : 0;
+            const sorted = [...pcts].sort((a, b) => a - b);
+            const mid    = Math.floor(sorted.length / 2);
+            const median = sorted.length % 2 ? sorted[mid] : ((sorted[mid-1] + sorted[mid]) / 2);
+            const sd     = pcts.length ? Math.sqrt(pcts.reduce((s, v) => s + (v - mean) ** 2, 0) / pcts.length) : 0;
+            const summaryRows = [
+                { 'Metric': 'Module',         'Value': state.currentRubric?.metadata?.module_code || '—' },
+                { 'Metric': 'Module Title',   'Value': state.currentRubric?.metadata?.module_title || '—' },
+                { 'Metric': 'Assessment',     'Value': state.currentRubric?.metadata?.course_work || '—' },
+                { 'Metric': 'Semester',       'Value': state.currentRubric?.metadata?.semester || '—' },
+                { 'Metric': 'Marker',         'Value': document.getElementById('markerName')?.value.trim() || '—' },
+                { 'Metric': 'Total Students', 'Value': state.studentData.length },
+                { 'Metric': 'Marked',         'Value': marked.length },
+                { 'Metric': 'Non-Submissions','Value': state.studentData.filter(s => s.nonSubmission).length },
+                { 'Metric': 'Pass Threshold', 'Value': pass + '%' },
+                { 'Metric': 'Mean %',         'Value': mean.toFixed(1) + '%' },
+                { 'Metric': 'Median %',       'Value': median.toFixed(1) + '%' },
+                { 'Metric': 'Std Dev',        'Value': sd.toFixed(1) },
+                { 'Metric': 'Min %',          'Value': sorted.length ? sorted[0].toFixed(1) + '%' : '—' },
+                { 'Metric': 'Max %',          'Value': sorted.length ? sorted[sorted.length-1].toFixed(1) + '%' : '—' },
+                { 'Metric': 'Pass Rate',      'Value': pcts.length ? (pcts.filter(p => p >= pass).length + '/' + pcts.length + ' (' + ((pcts.filter(p => p >= pass).length / pcts.length)*100).toFixed(0) + '%)') : '—' },
+                { 'Metric': 'Failure Rate',   'Value': pcts.length ? (pcts.filter(p => p < pass).length + '/' + pcts.length + ' (' + ((pcts.filter(p => p < pass).length / pcts.length)*100).toFixed(0) + '%)') : '—' },
+                { 'Metric': 'Students with Open Issues', 'Value': state.studentData.filter(s => (s.issues||[]).some(i => !i.resolved)).length },
+                { 'Metric': '— Deadlines —',  'Value': '' },
+                { 'Metric': 'Submission Deadline',  'Value': state.deadlines.submission  || '—' },
+                { 'Metric': 'Marking Deadline',     'Value': state.deadlines.marking     || '—' },
+                { 'Metric': 'Moderation Deadline',  'Value': state.deadlines.moderation  || '—' },
+                { 'Metric': 'Feedback Release',     'Value': state.deadlines.feedback    || '—' },
+                { 'Metric': 'Generated',      'Value': new Date().toLocaleString('en-GB') },
+            ];
+
+            // ── Sheet 3: Boundary Review ───────────────────────────────────
+            const boundaryRows = state.studentData
+                .filter(s => !s.nonSubmission && s.score > 0)
+                .map(s => {
+                    const pctNum = maxScore > 0 ? (s.score / maxScore) * 100 : 0;
+                    const z = classifyMark(pctNum);
+                    return { 'Student ID': s.id, 'Name': s.name, 'Score': s.score,
+                        'Max Score': maxScore, 'Percentage': pctNum.toFixed(1) + '%',
+                        'Grade Zone': z.label, 'Attention Required': z.guidance ? 'YES' : '',
+                        'Guidance': z.guidance || '' };
+                })
+                .filter(r => r['Attention Required'] === 'YES');
+
+            // ── Sheet 4: EC Students ───────────────────────────────────────
+            const ecRows = state.studentData.filter(s => EC_STATUSES.has(s.status)).map(s => ({
+                'Student ID': s.id, 'Name': s.name, 'Status': s.status,
+                'EC Type': s.ecDetails?.type || '', 'Approval Date': s.ecDetails?.approvalDate || '',
+                'New Deadline': s.ecDetails?.newDeadline || '', 'Notes': s.ecDetails?.notes || '',
+            }));
+
+            // ── Sheet 5: Resit Students ────────────────────────────────────
+            const resitRows = state.studentData.filter(s => RESIT_STATUSES.has(s.status)).map(s => {
+                const pctNum = maxScore > 0 ? (s.score / maxScore) * 100 : 0;
+                const effPct = s.resitDetails?.capped ? Math.min(pctNum, pass) : pctNum;
+                return { 'Student ID': s.id, 'Name': s.name, 'Status': s.status,
+                    'Previous Mark': s.resitDetails?.previousMark || '',
+                    'Attempt #': s.resitDetails?.attemptNumber || 2,
+                    'Score': s.score, 'Actual %': pctNum.toFixed(1),
+                    'Capped': s.resitDetails?.capped ? 'Yes' : 'No',
+                    'Effective %': effPct.toFixed(1),
+                    'Effective Zone': classifyMark(effPct).label };
+            });
+
+            // ── Sheet 6: Moderation Review ────────────────────────────────
+            // Aggregates all students requiring moderation attention
+            const mean2  = pcts.length ? pcts.reduce((a, b) => a + b, 0) / pcts.length : 0;
+            const sd2    = pcts.length ? Math.sqrt(pcts.reduce((s, v) => s + (v - mean2) ** 2, 0) / pcts.length) : 0;
+
+            const modReviewRows = [];
+            state.studentData.forEach(s => {
+                if (s.nonSubmission || !s.score) return;
+                const pctNum = maxScore > 0 ? (s.score / maxScore) * 100 : 0;
+                const z      = classifyMark(pctNum);
+                const flags  = [];
+
+                // Boundary flag
+                if (z.guidance) flags.push(z.label);
+
+                // Statistical outlier: more than 2 SD from mean
+                if (sd2 > 0 && Math.abs(pctNum - mean2) > 2 * sd2)
+                    flags.push(`Outlier (${pctNum > mean2 ? '+' : ''}${(pctNum - mean2).toFixed(1)}% from mean)`);
+
+                // Open issues
+                const openIssues = (s.issues || []).filter(i => !i.resolved);
+                if (openIssues.length) flags.push(`${openIssues.length} open issue(s)`);
+
+                // EC status but still scored
+                if (EC_STATUSES.has(s.status)) flags.push('EC student');
+
+                // Resit
+                if (RESIT_STATUSES.has(s.status)) flags.push('Resit/Repeat student');
+
+                if (flags.length) {
+                    modReviewRows.push({
+                        'Student ID':     s.id,
+                        'Name':           s.name,
+                        'Student Status': s.status || 'registered',
+                        'Score':          s.score,
+                        'Percentage':     pctNum.toFixed(1) + '%',
+                        'Grade Zone':     z.label,
+                        'Flags':          flags.join(' | '),
+                        'Open Issues':    openIssues.map(i => `[${i.type}] ${i.text}`).join(' | ') || '',
+                        'Timeline Notes': (s.timeline || []).map(t => `${t.date}: ${t.text}`).join(' | '),
+                    });
+                }
+            });
+
+            // ── Sheet 7: Module Tasks (includes activity notes) ───────────
+            const taskRows = state.moduleTasks.length
+                ? state.moduleTasks.map(t => ({
+                    'Title': t.title, 'Description': t.description || '',
+                    'Priority': t.priority, 'Deadline': t.deadline || '',
+                    'Status': t.status, 'Created': t.created || '',
+                    'Notes Count': (t.notes || []).length,
+                    'Activity Log': (t.notes || []).map(n =>
+                        `[${n.type.toUpperCase()}] ${n.date} — ${n.author}: ${n.text}`
+                    ).join(' | ') }))
+                : [{ 'Title': 'No tasks', 'Description': '', 'Priority': '', 'Deadline': '',
+                     'Status': '', 'Created': '', 'Notes Count': 0, 'Activity Log': '' }];
+
+            // ── Sheet 7: Full Data (re-importable) ────────────────────────
+            const fullRows = state.studentData.map(s => ({
+                'Student ID': s.id, 'Name': s.name, 'Score': s.score || 0,
+                'Student Status': s.status || 'registered', 'Non-Submission': s.nonSubmission || false,
+                'Feedback': s.feedback || '', 'Issues': JSON.stringify(s.issues || []),
+                'EC Details': JSON.stringify(s.ecDetails || {}),
+                'Resit Details': JSON.stringify(s.resitDetails || {}),
+                'Rubric Data': JSON.stringify(s.rubricData || {}),
+                'Timeline': JSON.stringify(s.timeline || []),
+            }));
+
+            // ── Colour-code the Marks sheet by grade zone ─────────────────
+            const marksWs = XLSX.utils.json_to_sheet(marksRows);
+            const ZONE_BG  = {
+                'distinction':            'C6EFCE',  // light green (dark text)
+                'borderline-distinction': 'E2EFDA',
+                'merit':                  'BDD7EE',
+                'borderline-merit':       'DDEBF7',
+                'pass':                   'FFEB9C',
+                'borderline-pass':        'FFF2CC',
+                'condoned-fail':          'FCE4D6',
+                'fail':                   'FF0000',  // red
+            };
+            const HDR_S = { fill:{ patternType:'solid', fgColor:{ rgb:'5D3B8E' } },
+                            font:{ bold:true, color:{ rgb:'FFFFFF' }, sz:9 },
+                            alignment:{ horizontal:'center', wrapText:true } };
+            const mRange = XLSX.utils.decode_range(marksWs['!ref'] || 'A1');
+            // Style header row
+            for (let c = mRange.s.c; c <= mRange.e.c; c++) {
+                const a = XLSX.utils.encode_cell({ r:0, c });
+                if (!marksWs[a]) marksWs[a] = { v:'', t:'s' };
+                marksWs[a].s = HDR_S;
+            }
+            // Style data rows
+            state.studentData.forEach((student, i) => {
+                const r = i + 1;
+                const pctNum = maxScore > 0 ? (student.score / maxScore) * 100 : 0;
+                let bgRgb = 'FFFFFF';
+                let fgRgb = '000000';
+                if (student.nonSubmission) {
+                    bgRgb = 'D9D9D9';
+                } else if (student.score > 0) {
+                    const z = classifyMark(pctNum);
+                    bgRgb = ZONE_BG[z.zone] || 'FFFFFF';
+                    if (z.zone === 'fail') fgRgb = 'FFFFFF';
+                }
+                for (let c = mRange.s.c; c <= mRange.e.c; c++) {
+                    const a = XLSX.utils.encode_cell({ r, c });
+                    if (!marksWs[a]) marksWs[a] = { v:'', t:'s' };
+                    marksWs[a].s = {
+                        fill: { patternType:'solid', fgColor:{ rgb: bgRgb } },
+                        font: { sz:9, color:{ rgb: fgRgb } }
+                    };
+                }
+            });
+
+            // ── App State sheet (hidden JSON for full re-import) ───────────
+            const appStateWs = XLSX.utils.json_to_sheet([{
+                'AppState': JSON.stringify({
+                    moduleTasks: state.moduleTasks,
+                    deadlines:   state.deadlines,
+                    settings:    state.settings,
+                    version:     2
+                })
+            }]);
+
+            const wb = XLSX.utils.book_new();
+            XLSX.utils.book_append_sheet(wb, marksWs,                                  'Marks');
+            XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(summaryRows),    'Summary');
+            if (boundaryRows.length)
+                XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(boundaryRows), 'Boundary Review');
+            if (ecRows.length)
+                XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(ecRows),     'EC Students');
+            if (resitRows.length)
+                XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(resitRows),  'Resit Students');
+            if (modReviewRows.length)
+                XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(modReviewRows), 'Moderation Review');
+            XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(taskRows),       'Tasks');
+            XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(fullRows),       'Full Data');
+            XLSX.utils.book_append_sheet(wb, appStateWs,                               'App State');
+
+            const mod = state.currentRubric?.metadata?.module_code || 'marks';
+            const timestamp = new Date().toISOString().slice(0, 10);
+            XLSX.writeFile(wb, `${mod}_${timestamp}.xlsx`);
+            saveToLocalStorage();
+        } catch (error) {
+            console.error('Export error:', error);
+            alert(`Export failed: ${error.message}`);
+        }
+    }
 
     // Initialize the application
     init();
+    loadFromLocalStorage();
+    setupKeyboardShortcuts();
+    setupStudentSearch();
 });
