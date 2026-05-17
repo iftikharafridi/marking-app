@@ -9,11 +9,11 @@ partner: Ulster University
 # Introduction to the Chosen Domain and Description of the Dataset [20]
 ## Excellent [17-20 marks]
 - Your introduction paints a vivid picture of the domain you're exploring, explaining its importance and relevance to data analytics in a very detailed manner.
-- You've described your dataset comprehensively, covering its origin, size, structure, and the significance of its variables clearly."
+- You've described your dataset comprehensively, covering its origin, size, structure, and the significance of its variables clearly.
 
 ## Good [13-16 marks]
 - You've provided a solid overview of the domain, giving enough context to understand its relevance to your analysis.
-- Your description of the dataset is clear and informative, offering insight into its main attributes and purpose."
+- Your description of the dataset is clear and informative, offering insight into its main attributes and purpose.
 
 ## Satisfactory [9 - 12 marks]
 - Your introduction gives a basic understanding of the domain and dataset, although it could use more depth and detail.
@@ -69,7 +69,7 @@ partner: Ulster University
 ## Poor [7 - 12 marks]
 - Your methodology is quite basic and lacks the depth needed for a robust analysis.
 - The presentation of your methods and code is rudimentary and might not provide enough insight for others to understand or replicate your work.
-- You have minimal data cleaning is minimal, without providing sufficient context for its importance.
+- You have minimal data cleaning, without providing sufficient context for its importance.
 
 
 ## Fail [0 - 6 marks]
