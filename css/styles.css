@@ -141,6 +141,16 @@ button:focus-visible {
     gap: clamp(0.3rem, 1vw, 0.5rem);
 }
 
+.score-pct {
+    font-size: clamp(0.75rem, 2vw, 0.9rem);
+    font-weight: 700;
+    white-space: nowrap;
+    opacity: 0.95;
+    background: rgba(255, 255, 255, 0.18);
+    padding: 0.15em 0.5em;
+    border-radius: 999px;
+}
+
 .criteria-score input {
     width: clamp(3rem, 10vw, 5rem);
     padding: clamp(0.3rem, 1vw, 0.5rem);
@@ -965,6 +975,12 @@ body.app-shell .criteria-score input.score-input {
 
 body.app-shell .criteria-score span {
   font-size: 10px;
+}
+
+body.app-shell .score-pct {
+  font-size: 10px;
+  font-weight: 700;
+  padding: 1px 6px;
 }
 
 /* Horizontal strip of performance-level columns */

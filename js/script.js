@@ -488,6 +488,7 @@ document.addEventListener('DOMContentLoaded', () => {
                             <input type="number" min="0" max="${criterion.maxScore}" 
                                    value="0" class="score-input w-20 px-2 py-1 border border-gray-400 rounded text-gray-900 bg-white text-[11px]">
                             <span>/ ${criterion.maxScore}</span>
+                            <span class="score-pct" title="Equivalent percentage out of 100"></span>
                         ` : ''}
                     </div>
                 </div>
@@ -602,6 +603,22 @@ document.addEventListener('DOMContentLoaded', () => {
         state.eventListeners = new WeakMap();
     }
 
+    // Convert a criterion mark to a percentage out of 100
+    function toPercent(score, maxScore) {
+        if (!maxScore || maxScore <= 0) return 0;
+        return (score / maxScore) * 100;
+    }
+
+    function formatPercent(score, maxScore) {
+        return toPercent(score, maxScore).toFixed(1) + '%';
+    }
+
+    // Show the /100 equivalent only when the criterion is not already out of 100
+    function criterionPercentLabel(score, maxScore) {
+        if (!maxScore || maxScore <= 0 || maxScore === 100) return '';
+        return formatPercent(score, maxScore);
+    }
+
     // Update the maximum possible score display
     function updateMaxScore() {
         if (!state.currentRubric) return;  // Changed from currentRubric
@@ -626,16 +643,23 @@ document.addEventListener('DOMContentLoaded', () => {
             );
             const score = parseFloat(scoreInput?.value) || 0;
             const maxScore = criterion.maxScore || 0;
+            const clamped = score > maxScore ? maxScore : score;
 
             // Validate score doesn't exceed max
-            if (score > maxScore) {
-                if (scoreInput) scoreInput.value = maxScore;
-                totalScore += maxScore;
-            } else {
-                totalScore += score;
+            if (score > maxScore && scoreInput) {
+                scoreInput.value = maxScore;
             }
-
+            totalScore += clamped;
             maxPossibleScore += maxScore;
+
+            const pctEl = document.querySelector(
+                `.criteria-card[data-index="${index}"] .score-pct`
+            );
+            if (pctEl) {
+                const pctLabel = criterionPercentLabel(clamped, maxScore);
+                pctEl.textContent = pctLabel ? `= ${pctLabel}` : '';
+                pctEl.style.display = pctLabel ? '' : 'none';
+            }
         });
 
         // Update UI
@@ -879,8 +903,9 @@ document.addEventListener('DOMContentLoaded', () => {
             const score = parseFloat(scoreInput?.value) || 0;
             totalScore += score;
 
-            // Criterion title and score
-            feedbackText += `${criterion.title}: [${score.toFixed(1)}/${criterion.maxScore}]\n`;
+            // Criterion title, raw score, and equivalent % out of 100 when not already /100
+            const pctLabel = criterionPercentLabel(score, criterion.maxScore);
+            feedbackText += `${criterion.title}: [${score.toFixed(1)}/${criterion.maxScore}]${pctLabel ? ` (${pctLabel})` : ''}\n`;
 
             // Selected feedback points
             const selectedPoints = [];
@@ -990,7 +1015,7 @@ document.addEventListener('DOMContentLoaded', () => {
                 bbDiv.appendChild(document.createElement('br'));
             } else if (trimmed.startsWith('- ') || trimmed.startsWith('• ')) {
                 listBuffer.push(trimmed.replace(/^[-•]\s*/, ''));
-            } else if (trimmed.match(/^\w.*\(\d+%\): \[\d+(\.\d+)?\/\d+\]/)) {
+            } else if (trimmed.match(/^.+: \[\d+(\.\d+)?\/\d+\](\s*\([^)]*%\))?$/)) {
                 if (listBuffer.length > 0) {
                     const ul = document.createElement('ul');
                     listBuffer.forEach(item => {
@@ -1476,9 +1501,13 @@ document.addEventListener('DOMContentLoaded', () => {
         // Re-enable inputs in case previous student was NS
         setRubricInputsDisabled(false);
 
-        // Clear all score inputs
+        // Clear all score inputs and hide converted percentages
         document.querySelectorAll('.score-input').forEach(input => {
             input.value = 0;
+        });
+        document.querySelectorAll('.score-pct').forEach(el => {
+            el.textContent = '';
+            el.style.display = 'none';
         });
 
         // Uncheck all feedback checkboxes
@@ -3201,7 +3230,8 @@ partner: Ulster University
         const criteriaRows = rubric ? rubric.criteria.map((c, i) => {
             const sc = student.rubricData?.scores?.[i] ?? 0;
             const cc = student.rubricData?.criteriaComments?.[i] || '';
-            return `<tr><td><b>${c.title}</b>${cc ? `<br><span class="cc">${cc}</span>` : ''}</td><td style="text-align:right;font-weight:700;">${sc}/${c.maxScore}</td></tr>`;
+            const pctLabel = criterionPercentLabel(sc, c.maxScore);
+            return `<tr><td><b>${c.title}</b>${cc ? `<br><span class="cc">${cc}</span>` : ''}</td><td style="text-align:right;font-weight:700;">${sc}/${c.maxScore}${pctLabel ? ` (${pctLabel})` : ''}</td></tr>`;
         }).join('') : '';
 
         const html = `<!DOCTYPE html><html><head><meta charset="UTF-8">
@@ -3414,6 +3444,9 @@ partner: Ulster University
                     state.currentRubric.criteria.forEach((crit, idx) => {
                         const score = student.rubricData?.scores?.[idx] ?? 0;
                         row[`${crit.title} (/${crit.maxScore})`] = student.nonSubmission ? 'NS' : score;
+                        row[`${crit.title} (%)`] = student.nonSubmission
+                            ? 'NS'
+                            : (crit.maxScore > 0 ? formatPercent(score, crit.maxScore) : '');
                     });
                 }
                 row['Total Score']      = student.nonSubmission ? 'NS' : (student.score || 0);
@@ -3423,6 +3456,22 @@ partner: Ulster University
                 row['Overall Comments'] = student.rubricData?.overallComments || '';
                 const openIssues = (student.issues || []).filter(i => !i.resolved);
                 row['Open Issues']      = openIssues.length > 0 ? openIssues.map(x => `[${x.type.toUpperCase()}] ${x.text}`).join(' | ') : '';
+                return row;
+            });
+
+            // ── Sheet 1b: Marks % (out of 100 only) ────────────────────────
+            const pctOnlyRows = state.studentData.map((student, i) => {
+                const pctNum = maxScore > 0 ? (student.score / maxScore) * 100 : 0;
+                const row = { '#': i + 1, 'Student ID': student.id, 'Name': student.name };
+                if (state.currentRubric) {
+                    state.currentRubric.criteria.forEach((crit, idx) => {
+                        const score = student.rubricData?.scores?.[idx] ?? 0;
+                        row[`${crit.title} (/100)`] = student.nonSubmission
+                            ? 'NS'
+                            : (crit.maxScore > 0 ? parseFloat(toPercent(score, crit.maxScore).toFixed(1)) : '');
+                    });
+                }
+                row['Total (/100)'] = student.nonSubmission ? 'NS' : parseFloat(pctNum.toFixed(1));
                 return row;
             });
 
@@ -3606,6 +3655,36 @@ partner: Ulster University
                 }
             });
 
+            // Style the Marks % sheet the same way
+            const pctWs = XLSX.utils.json_to_sheet(pctOnlyRows);
+            const pRange = XLSX.utils.decode_range(pctWs['!ref'] || 'A1');
+            for (let c = pRange.s.c; c <= pRange.e.c; c++) {
+                const a = XLSX.utils.encode_cell({ r:0, c });
+                if (!pctWs[a]) pctWs[a] = { v:'', t:'s' };
+                pctWs[a].s = HDR_S;
+            }
+            state.studentData.forEach((student, i) => {
+                const r = i + 1;
+                const pctNum = maxScore > 0 ? (student.score / maxScore) * 100 : 0;
+                let bgRgb = 'FFFFFF';
+                let fgRgb = '000000';
+                if (student.nonSubmission) {
+                    bgRgb = 'D9D9D9';
+                } else if (student.score > 0) {
+                    const z = classifyMark(pctNum);
+                    bgRgb = ZONE_BG[z.zone] || 'FFFFFF';
+                    if (z.zone === 'fail') fgRgb = 'FFFFFF';
+                }
+                for (let c = pRange.s.c; c <= pRange.e.c; c++) {
+                    const a = XLSX.utils.encode_cell({ r, c });
+                    if (!pctWs[a]) pctWs[a] = { v:'', t:'s' };
+                    pctWs[a].s = {
+                        fill: { patternType:'solid', fgColor:{ rgb: bgRgb } },
+                        font: { sz:9, color:{ rgb: fgRgb } }
+                    };
+                }
+            });
+
             // ── App State sheet (hidden JSON for full re-import) ───────────
             const appStateWs = XLSX.utils.json_to_sheet([{
                 'AppState': JSON.stringify({
@@ -3618,6 +3697,7 @@ partner: Ulster University
 
             const wb = XLSX.utils.book_new();
             XLSX.utils.book_append_sheet(wb, marksWs,                                  'Marks');
+            XLSX.utils.book_append_sheet(wb, pctWs,                                    'Marks %');
             XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(summaryRows),    'Summary');
             if (boundaryRows.length)
                 XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(boundaryRows), 'Boundary Review');
