@@ -6,6 +6,7 @@ document.addEventListener('DOMContentLoaded', () => {
     const elements = {
         studentFileUpload: getElement('studentFileUpload'),
         loadStudentsBtn: getElement('loadStudentsBtn'),
+        restoreWorkbookBtn: getElement('restoreWorkbookBtn'),
         studentSelect: getElement('studentSelect'),
         prevStudent: getElement('prevStudent'),
         nextStudent: getElement('nextStudent'),
@@ -64,8 +65,12 @@ document.addEventListener('DOMContentLoaded', () => {
         _taskDetailIndex: -1,
         eventListeners: new WeakMap(),
         eventListenerRefs: [],
-        settings: { programmeLevel: 'msc', customPassMark: 50 }
+        settings: { programmeLevel: 'msc', customPassMark: 50 },
+        rubricIdentity: null
     };
+    let importIntent = 'students';
+    let pendingWorkbook = null;
+    window.__lastRestoreGuard = { applied: false, reason: '', loadedRubricId: '' };
 
     // Statuses that disable rubric inputs
     const NS_LIKE_STATUSES = new Set(['ns', 'withdrawn', 'suspended']);
@@ -178,8 +183,16 @@ document.addEventListener('DOMContentLoaded', () => {
 
     function setupEventListeners() {
         // Set up event listeners
-        elements.loadStudentsBtn?.addEventListener('click', () => elements.studentFileUpload?.click());
+        elements.loadStudentsBtn?.addEventListener('click', () => {
+            importIntent = 'students';
+            elements.studentFileUpload?.click();
+        });
+        elements.restoreWorkbookBtn?.addEventListener('click', () => {
+            importIntent = 'restore';
+            elements.studentFileUpload?.click();
+        });
         elements.studentFileUpload?.addEventListener('change', handleStudentFileUpload);
+        document.getElementById('wbRestoreClose')?.addEventListener('click', closeWorkbookModal);
         elements.studentSelect?.addEventListener('change', (e) => {
             const selectedIndex = parseInt(e.target.value);
             if (!isNaN(selectedIndex) && selectedIndex >= 0) {
@@ -1334,6 +1347,105 @@ document.addEventListener('DOMContentLoaded', () => {
         document.body.removeChild(a);
     }
 
+    window.setRubricIdentity = function (identity) {
+        state.rubricIdentity = identity || null;
+    };
+
+    function buildAcademicContext() {
+        const meta = state.currentRubric?.metadata || {};
+        const ident = state.rubricIdentity || {};
+        const moduleCode = ident.moduleCode || ident.moduleId || meta.module_code || '';
+        let rubricId = ident.rubricId || '';
+        if (ident.moduleCode && meta.module_code &&
+            String(ident.moduleCode).toUpperCase() !== String(meta.module_code).toUpperCase()) {
+            rubricId = '';
+        }
+        const fp = state.currentRubric ? WorkbookRestore.fingerprintFromRubric(state.currentRubric) : null;
+        return {
+            partnerId: ident.partnerId || '',
+            partnerName: ident.partnerName || meta.partner || '',
+            programmeId: ident.programmeId || '',
+            programmeName: ident.programmeName || '',
+            programmeLevel: state.settings.programmeLevel || 'msc',
+            moduleCode,
+            moduleTitle: ident.moduleTitle || meta.module_title || '',
+            assessmentId: ident.assessmentId || '',
+            assessmentName: ident.assessmentName || meta.course_work || '',
+            rubricFile: ident.rubricFile || '',
+            rubricId,
+            passMark: getPassMark(),
+            markerName: elements.markerName?.value.trim() || '',
+            rubricFingerprint: fp
+        };
+    }
+
+    function applyProgrammeSettings(settings) {
+        if (!settings) return;
+        state.settings.programmeLevel = settings.programmeLevel || 'msc';
+        if (settings.customPassMark != null) state.settings.customPassMark = settings.customPassMark;
+        const lvlSel = document.getElementById('programmeLevelSelect');
+        if (lvlSel) lvlSel.value = state.settings.programmeLevel;
+        const cpEl = document.getElementById('customPassMark');
+        if (cpEl) cpEl.value = state.settings.customPassMark || 50;
+        const customRow = document.getElementById('customPassMarkRow');
+        if (customRow) customRow.style.display = state.settings.programmeLevel === 'custom' ? 'flex' : 'none';
+    }
+
+    function openWorkbookModal(opts) {
+        const modal = document.getElementById('workbookRestoreModal');
+        const title = document.getElementById('wbRestoreTitle');
+        const body = document.getElementById('wbRestoreBody');
+        const actions = document.getElementById('wbRestoreActions');
+        if (!modal || !title || !body || !actions) {
+            alert(opts.fallbackAlert || opts.title);
+            return;
+        }
+        title.textContent = opts.title || 'MARKING WORKBOOK';
+        body.innerHTML = opts.bodyHtml || '';
+        actions.innerHTML = '';
+        (opts.buttons || []).forEach(b => {
+            const btn = document.createElement('button');
+            btn.className = b.className || 'btn-nav';
+            btn.textContent = b.label;
+            btn.addEventListener('click', b.onClick);
+            actions.appendChild(btn);
+        });
+        modal.style.display = 'flex';
+    }
+
+    function closeWorkbookModal() {
+        const modal = document.getElementById('workbookRestoreModal');
+        if (modal) modal.style.display = 'none';
+        pendingWorkbook = null;
+    }
+
+    function contextSummaryHtml(ctx, studentCount, extraHtml) {
+        const d = WorkbookRestore.displayLabel(ctx);
+        return `
+            <div class="wb-restore-kicker">Marking workbook recognised</div>
+            <div class="wb-restore-context">
+                <div><strong>${d.partner}</strong></div>
+                <div>${d.programme}</div>
+                <div>${d.moduleLine}</div>
+                <div>${d.assessment}</div>
+            </div>
+            <div class="wb-restore-meta">
+                <span>Pass threshold: ${d.pass}</span>
+                <span>Rubric: ${d.rubric}</span>
+                <span>Students: ${studentCount}</span>
+            </div>
+            ${extraHtml || ''}
+        `;
+    }
+
+    function currentSessionHasMarks() {
+        return (state.studentData || []).some(s => {
+            if (s.nonSubmission) return true;
+            const scores = s.rubricData && s.rubricData.scores;
+            return (scores && scores.some(v => v !== null && v !== undefined && v !== '')) || (s.score > 0);
+        });
+    }
+
     // Handle Excel file upload
     async function handleStudentFileUpload() {
         const file = elements.studentFileUpload.files[0];
@@ -1341,72 +1453,26 @@ document.addEventListener('DOMContentLoaded', () => {
             alert('Please select an Excel file first!');
             return;
         }
+        const intent = importIntent;
+        elements.studentFileUpload.value = '';
 
         try {
-            const { rows, appState } = await readExcelFile(file);
-            state.studentData = processStudentData(rows);
-
-            if (state.studentData.length === 0) {
-                throw new Error('No student data found in the file');
-            }
-
-            // Populate student dropdown
-            elements.studentSelect.innerHTML = '<option value="">Select Student</option>';
-            state.studentData.forEach((student, index) => {
-                const option = document.createElement('option');
-                option.value = index;
-                if (student.nonSubmission) {
-                    option.textContent = `[NS] ${student.id} - ${student.name}`;
-                    option.classList.add('ns-option');
-                } else {
-                    option.textContent = `${student.id} - ${student.name}`;
-                }
-                elements.studentSelect.appendChild(option);
+            const parsed = await readWorkbookFile(file);
+            const columns = parsed.rows[0] ? Object.keys(parsed.rows[0]) : [];
+            const detection = WorkbookRestore.detectWorkbookKind({
+                sheetNames: parsed.sheetNames,
+                appState: parsed.appState,
+                columns,
+                rows: parsed.rows,
+                fileName: file.name
             });
-
-            elements.studentSelect.disabled = false;
-            if (elements.prevStudent)  elements.prevStudent.disabled  = false;
-            if (elements.nextStudent)  elements.nextStudent.disabled  = false;
-            if (elements.statusSelect) elements.statusSelect.disabled = false;
-            if (elements.issuesBtn)    elements.issuesBtn.disabled    = false;
-
-            // Apply proper labels (issue flags, status prefix)
-            state.studentData.forEach((_, i) => updateStudentOptionLabel(i));
-
-            // Update student status chip
-            if (elements.studentStatusChip) {
-                elements.studentStatusChip.textContent = `${state.studentData.length} students`;
-                elements.studentStatusChip.className = 'status-chip chip-students';
+            parsed.detection = detection;
+            parsed.fileName = file.name;
+            if (intent === 'restore') {
+                await beginWorkbookRestore(parsed);
+            } else {
+                await beginStudentListImport(parsed);
             }
-            populateQuickIssueSelect();
-
-            // Restore tasks, deadlines, settings from saved App State sheet
-            if (appState) {
-                if (Array.isArray(appState.moduleTasks) && appState.moduleTasks.length) {
-                    state.moduleTasks = appState.moduleTasks;
-                }
-                if (appState.deadlines) {
-                    Object.assign(state.deadlines, appState.deadlines);
-                    ['dlSubmission','dlMarking','dlModeration','dlFeedback'].forEach(id => {
-                        const key = { dlSubmission:'submission', dlMarking:'marking',
-                                      dlModeration:'moderation', dlFeedback:'feedback' }[id];
-                        const el = document.getElementById(id);
-                        if (el && state.deadlines[key]) {
-                            el.value = state.deadlines[key];
-                            updateDeadlineChip(id, state.deadlines[key]);
-                        }
-                    });
-                }
-                if (appState.settings) Object.assign(state.settings, appState.settings);
-            }
-
-            alert(`Loaded ${state.studentData.length} students` +
-                  (appState ? ' (with saved tasks & deadlines)' : ''));
-
-            // Reset current student index
-            state.currentStudentIndex = -1;
-            updateNavButtons();
-
         } catch (error) {
             console.error('Error processing student file:', error);
             alert(`Failed to load student data: ${error.message}`);
@@ -1414,29 +1480,431 @@ document.addEventListener('DOMContentLoaded', () => {
 
         updateProgressIndicator();
     }
-    // Read Excel file — prefers "Full Data" sheet; also restores App State (tasks/deadlines)
-    function readExcelFile(file) {
+
+    async function beginStudentListImport(parsed) {
+        const kind = parsed.detection && parsed.detection.kind;
+        if (kind === 'marking-session') {
+            openWorkbookModal({
+                title: 'MARKING WORKBOOK RECOGNISED',
+                bodyHtml: contextSummaryHtml(
+                    WorkbookRestore.inferAcademicContext({
+                        appState: parsed.appState,
+                        summaryRows: parsed.summaryRows,
+                        currentIdentity: state.rubricIdentity
+                    }),
+                    (parsed.rows || []).length,
+                    `<p class="wb-restore-warn">This file is a Marking App session backup, not a simple student list. Restoring will load the saved module/rubric first. Importing names only leaves the current rubric unchanged and does not copy marks.</p>`
+                ),
+                buttons: [
+                    { label: 'Restore Session', className: 'btn-green', onClick: () => beginWorkbookRestore(parsed) },
+                    { label: 'Import names only', className: 'btn-action', onClick: () => importNamesOnly(parsed) },
+                    { label: 'Cancel', className: 'btn-nav', onClick: closeWorkbookModal }
+                ]
+            });
+            return;
+        }
+        if (kind === 'ambiguous') {
+            openWorkbookModal({
+                title: 'CONFIRM FILE TYPE',
+                bodyHtml: `<p>This workbook has some marking columns but does not clearly identify a saved session. Choose how to continue. Criterion marks will not be applied to the currently loaded rubric unless you restore a recognised session.</p>`,
+                buttons: [
+                    { label: 'Restore if possible', className: 'btn-green', onClick: () => beginWorkbookRestore(parsed) },
+                    { label: 'Import names only', className: 'btn-action', onClick: () => importNamesOnly(parsed) },
+                    { label: 'Cancel', className: 'btn-nav', onClick: closeWorkbookModal }
+                ]
+            });
+            return;
+        }
+        importNamesOnly(parsed, { silentReplace: false });
+    }
+
+    function importNamesOnly(parsed, options) {
+        const opts = options || {};
+        const students = processStudentData(parsed.rows || [], { namesOnly: true })
+            .filter(s => s.id || s.name);
+        if (!students.length) {
+            closeWorkbookModal();
+            alert('No student names were found in the file.');
+            return;
+        }
+        if (!opts.silentReplace && state.studentData.length) {
+            if (!confirm(`Replace the current list of ${state.studentData.length} students with ${students.length} imported names? Marks in the current session will not be kept.`)) {
+                return;
+            }
+        }
+        applyImportedStudents(students);
+        closeWorkbookModal();
+        alert(`Imported ${students.length} students into the current module/rubric.`);
+        updateProgressIndicator();
+    }
+
+    async function beginWorkbookRestore(parsed) {
+        const kind = parsed.detection && parsed.detection.kind;
+        if (kind === 'student-list') {
+            openWorkbookModal({
+                title: 'STUDENT LIST DETECTED',
+                bodyHtml: '<p>This file is a student list, not a Marking App session backup. Use <strong>Import Student List</strong> to add these names to the currently loaded module.</p>',
+                buttons: [
+                    { label: 'Import names into current module', className: 'btn-action', onClick: () => importNamesOnly(parsed) },
+                    { label: 'Cancel', className: 'btn-nav', onClick: closeWorkbookModal }
+                ]
+            });
+            return;
+        }
+        if (kind === 'unknown') {
+            openWorkbookModal({
+                title: 'UNRECOGNISED FILE',
+                bodyHtml: '<p>This workbook could not be identified as a Marking App session or a student list.</p>',
+                buttons: [{ label: 'Close', className: 'btn-nav', onClick: closeWorkbookModal }]
+            });
+            return;
+        }
+
+        const ctx = WorkbookRestore.inferAcademicContext({
+            appState: parsed.appState,
+            summaryRows: parsed.summaryRows,
+            currentIdentity: state.rubricIdentity
+        });
+        parsed.academicContext = ctx;
+        const count = (parsed.rows || []).length;
+        const replaceWarn = currentSessionHasMarks()
+            ? '<p class="wb-restore-warn">This will replace the current marking session, including students, marks, issues and tasks.</p>'
+            : '';
+        openWorkbookModal({
+            title: 'MARKING WORKBOOK RECOGNISED',
+            bodyHtml: contextSummaryHtml(ctx, count, replaceWarn + '<p>Restore this marking session?</p>'),
+            buttons: [
+                { label: 'Restore Session', className: 'btn-green', onClick: () => resolveAndRestore(parsed, ctx) },
+                { label: 'Cancel', className: 'btn-nav', onClick: closeWorkbookModal }
+            ]
+        });
+    }
+
+    async function fetchRubricMarkdown(rubricId) {
+        const rel = String(rubricId || '').replace(/^rubrics\//, '');
+        if (!rel) return null;
+        const path = 'rubrics/' + rel;
+        if (typeof window.__rubricFetchOverride === 'function') {
+            return window.__rubricFetchOverride(path);
+        }
+        if (window.rubricLoader && typeof window.rubricLoader.fetchRubricText === 'function') {
+            return window.rubricLoader.fetchRubricText(rel);
+        }
+        const response = await fetch(path);
+        if (!response.ok) return null;
+        return response.text();
+    }
+
+    async function getRubricCatalog() {
+        if (window.rubricLoader && typeof window.rubricLoader.getCatalog === 'function') {
+            return window.rubricLoader.getCatalog();
+        }
+        const catalog = [];
+        try {
+            const unis = await (await fetch('rubrics/index.json')).json();
+            for (const u of unis) {
+                const programs = await (await fetch('rubrics/' + u.id + '/index.json')).json();
+                for (const p of programs) {
+                    const modules = await (await fetch('rubrics/' + u.id + '/' + p.id + '/index.json')).json();
+                    for (const m of modules) {
+                        const comps = await (await fetch('rubrics/' + u.id + '/' + p.id + '/' + m.id + '/index.json')).json();
+                        for (const c of comps) {
+                            const file = c.file || c.id;
+                            catalog.push({
+                                partnerId: u.id, partnerName: u.name,
+                                programmeId: p.id, programmeName: p.name,
+                                moduleCode: m.code || m.id, moduleTitle: m.name,
+                                assessmentId: c.id, assessmentName: c.name,
+                                rubricFile: file,
+                                rubricId: u.id + '/' + p.id + '/' + m.id + '/' + file
+                            });
+                        }
+                    }
+                }
+            }
+        } catch (e) {
+            console.error('Rubric catalog fallback failed', e);
+        }
+        return catalog;
+    }
+
+    async function resolveAndRestore(parsed, ctx) {
+        window.__lastRestoreGuard = { applied: false, reason: 'pending', loadedRubricId: '' };
+        let located = null;
+
+        try {
+            if (ctx.rubricId) {
+                const text = await fetchRubricMarkdown(ctx.rubricId);
+                if (text) {
+                    located = {
+                        rubricId: ctx.rubricId,
+                        text,
+                        identity: Object.assign({}, ctx, WorkbookRestore.parseRubricId(ctx.rubricId) || {})
+                    };
+                }
+            }
+            if (!located) {
+                const catalog = await getRubricCatalog();
+                const match = WorkbookRestore.matchCatalog(catalog, ctx);
+                if (match.unique) {
+                    const text = await fetchRubricMarkdown(match.unique.rubricId);
+                    if (text) {
+                        located = { rubricId: match.unique.rubricId, text, identity: Object.assign({}, ctx, match.unique) };
+                    }
+                } else if (match.matches && match.matches.length > 1) {
+                    showRubricChoice(parsed, ctx, match.matches);
+                    return;
+                }
+            }
+        } catch (e) {
+            console.error('Rubric resolve failed', e);
+        }
+
+        const savedMd = parsed.appState && parsed.appState.rubricMarkdown;
+        if (!located) {
+            showRubricMissing(parsed, ctx, savedMd);
+            return;
+        }
+        await continueRestoreWithRubric(parsed, ctx, located);
+    }
+
+    function showRubricChoice(parsed, ctx, matches) {
+        const list = matches.map(m => `${m.moduleCode} · ${m.assessmentName} · ${m.rubricFile}`).join('<br>');
+        openWorkbookModal({
+            title: 'SELECT RUBRIC',
+            bodyHtml: `<p class="wb-restore-warn">More than one built-in rubric could match this workbook. The marking data has not been applied.</p><p>${list}</p><p>Please choose the correct rubric in Setup, then restore again.</p>`,
+            buttons: [{ label: 'Cancel', className: 'btn-nav', onClick: closeWorkbookModal }]
+        });
+        window.__lastRestoreGuard = { applied: false, reason: 'rubric-ambiguous', loadedRubricId: '' };
+    }
+
+    function showRubricMissing(parsed, ctx, savedMd) {
+        const code = ctx.moduleCode || 'The required';
+        const assess = ctx.assessmentName || ctx.assessmentId || 'rubric';
+        window.__lastRestoreGuard = { applied: false, reason: 'rubric-not-located', loadedRubricId: '' };
+        const buttons = [{ label: 'Cancel', className: 'btn-nav', onClick: closeWorkbookModal }];
+        if (savedMd) {
+            buttons.unshift({
+                label: 'Use Saved Session Rubric',
+                className: 'btn-action',
+                onClick: () => continueRestoreWithRubric(parsed, ctx, {
+                    rubricId: ctx.rubricId || 'saved-session',
+                    text: savedMd,
+                    identity: ctx,
+                    fromSavedMarkdown: true
+                })
+            });
+        }
+        openWorkbookModal({
+            title: 'RUBRIC NOT FOUND',
+            bodyHtml: `<div class="wb-restore-stop">${code} ${assess} rubric could not be located.<br><br>The marking workbook has not been applied to the currently loaded rubric.<br>Please locate/import the correct rubric before continuing.</div>`,
+            buttons
+        });
+    }
+
+    async function continueRestoreWithRubric(parsed, ctx, located) {
+        let locatedRubric;
+        try {
+            locatedRubric = parseRubric(located.text);
+        } catch (e) {
+            window.__lastRestoreGuard = { applied: false, reason: 'rubric-parse-failed', loadedRubricId: '' };
+            alert('The located rubric could not be parsed. Marking data was not applied.');
+            return;
+        }
+        const savedFp = ctx.rubricFingerprint ||
+            (parsed.appState && parsed.appState.rubricMarkdown
+                ? WorkbookRestore.fingerprintFromRubric(parseRubric(parsed.appState.rubricMarkdown))
+                : null);
+        const currentFp = WorkbookRestore.fingerprintFromRubric(locatedRubric);
+        const comparison = savedFp
+            ? WorkbookRestore.compareFingerprints(savedFp, currentFp)
+            : { ok: true, assumed: !savedFp };
+
+        const gate = WorkbookRestore.canApplyCriterionData({
+            rubricReady: true,
+            comparison: located.fromSavedMarkdown ? { ok: true } : comparison
+        });
+        if (!gate.apply && !located.fromSavedMarkdown) {
+            showRubricMismatch(parsed, ctx, located, comparison);
+            return;
+        }
+        const preview = processStudentData(parsed.rows || []);
+        const nCrit = locatedRubric.criteria.length;
+        const misaligned = preview.some(s => {
+            if (s.nonSubmission) return false;
+            const scores = s.rubricData && s.rubricData.scores;
+            return scores && scores.length && nCrit && scores.length !== nCrit;
+        });
+        if (misaligned && !located.fromSavedMarkdown) {
+            window.__lastRestoreGuard = { applied: false, reason: 'score-length-mismatch', loadedRubricId: located.rubricId || '' };
+            openWorkbookModal({
+                title: 'RUBRIC MISMATCH',
+                bodyHtml: '<div class="wb-restore-stop">Saved criterion scores do not match the located rubric. The marking workbook has not been applied to the currently loaded rubric.</div>',
+                buttons: [{ label: 'Cancel', className: 'btn-nav', onClick: closeWorkbookModal }]
+            });
+            return;
+        }
+        await commitRestore(parsed, located, ctx);
+    }
+
+    function showRubricMismatch(parsed, ctx, located, comparison) {
+        window.__lastRestoreGuard = { applied: false, reason: 'rubric-mismatch', loadedRubricId: located.rubricId || '' };
+        const saved = comparison.saved || {};
+        const cur = comparison.current || {};
+        const diffLines = (comparison.details || []).map(d => {
+            const a = d.saved ? `${d.saved.title} /${d.saved.maxScore}` : '(missing)';
+            const b = d.current ? `${d.current.title} /${d.current.maxScore}` : '(missing)';
+            return `C${d.index + 1}: saved ${a} → current ${b}`;
+        }).join('\n') || (comparison.mismatches || []).join('\n');
+        const savedMd = parsed.appState && parsed.appState.rubricMarkdown;
+        const buttons = [
+            {
+                label: 'Review Differences',
+                className: 'btn-nav',
+                onClick: () => {
+                    const extra = document.getElementById('wbRestoreDiff');
+                    if (extra) extra.style.display = extra.style.display === 'none' ? 'block' : 'none';
+                }
+            },
+            { label: 'Cancel', className: 'btn-nav', onClick: closeWorkbookModal }
+        ];
+        if (savedMd) {
+            buttons.splice(1, 0, {
+                label: 'Use Saved Session Rubric',
+                className: 'btn-action',
+                onClick: () => continueRestoreWithRubric(parsed, ctx, {
+                    rubricId: ctx.rubricId || located.rubricId,
+                    text: savedMd,
+                    identity: located.identity || ctx,
+                    fromSavedMarkdown: true
+                })
+            });
+        }
+        openWorkbookModal({
+            title: 'RUBRIC VERSION DIFFERENCE',
+            bodyHtml: `<p class="wb-restore-warn">The saved workbook was created using a different version of this rubric. Criterion marks have not been applied to the currently loaded rubric.</p>
+                <p>Saved: ${saved.criterionCount || '—'} criteria / ${saved.totalMax || '—'} marks<br>
+                Current: ${cur.criterionCount || '—'} criteria / ${cur.totalMax || '—'} marks</p>
+                <pre id="wbRestoreDiff" class="wb-restore-diff" style="display:none;">${diffLines}</pre>`,
+            buttons
+        });
+    }
+
+    async function commitRestore(parsed, located, ctx) {
+        elements.rubricInput.value = located.text;
+        if (!loadRubric()) {
+            window.__lastRestoreGuard = { applied: false, reason: 'rubric-load-failed', loadedRubricId: '' };
+            alert('The located rubric could not be loaded. Marking data was not applied.');
+            return;
+        }
+        window.__lastRestoreGuard = {
+            applied: true,
+            reason: 'ok',
+            loadedRubricId: located.rubricId || '',
+            loadedBeforeStudents: true
+        };
+
+        const ident = located.identity || WorkbookRestore.parseRubricId(located.rubricId) || ctx;
+        if (ident) {
+            window.setRubricIdentity(Object.assign({}, ctx, ident, {
+                rubricId: located.rubricId || ident.rubricId || ctx.rubricId,
+                rubricFile: ident.rubricFile || ctx.rubricFile
+            }));
+            if (window.rubricLoader) {
+                await window.rubricLoader.syncDropdowns({
+                    partnerId: ident.partnerId,
+                    programmeId: ident.programmeId,
+                    moduleId: ident.moduleId || ident.moduleCode || ctx.moduleCode,
+                    rubricFile: ident.rubricFile || ctx.rubricFile
+                });
+            }
+        }
+
+        const settings = (parsed.appState && parsed.appState.settings) || {
+            programmeLevel: ctx.programmeLevel || WorkbookRestore.inferProgrammeLevel(ctx.programmeId) || 'msc',
+            customPassMark: ctx.passMark
+        };
+        applyProgrammeSettings(settings);
+
+        const students = processStudentData(parsed.rows || []);
+        const nCrit = state.currentRubric ? state.currentRubric.criteria.length : 0;
+        const misaligned = students.some(s => {
+            if (s.nonSubmission) return false;
+            const scores = s.rubricData && s.rubricData.scores;
+            return scores && scores.length && nCrit && scores.length !== nCrit;
+        });
+        if (misaligned) {
+            window.__lastRestoreGuard = { applied: false, reason: 'score-length-mismatch', loadedRubricId: located.rubricId || '' };
+            openWorkbookModal({
+                title: 'RUBRIC MISMATCH',
+                bodyHtml: '<div class="wb-restore-stop">Saved criterion scores do not match the located rubric. The marking workbook has not been applied to the currently loaded rubric.</div>',
+                buttons: [{ label: 'Cancel', className: 'btn-nav', onClick: closeWorkbookModal }]
+            });
+            return;
+        }
+
+        applyImportedStudents(students);
+        applyWorkbookAppState(parsed.appState);
+        if (parsed.appState && parsed.appState.academicContext && parsed.appState.academicContext.markerName && elements.markerName && !elements.markerName.value.trim()) {
+            elements.markerName.value = parsed.appState.academicContext.markerName;
+        }
+        closeWorkbookModal();
+        switchTab('students');
+        saveToLocalStorage();
+        updateProgressIndicator();
+    }
+
+    function applyImportedStudents(students) {
+        state.studentData = students;
+        state.currentStudentIndex = -1;
+        populateStudentSelect();
+        populateQuickIssueSelect();
+        updateNavButtons();
+        if (elements.studentStatusChip) {
+            elements.studentStatusChip.textContent = `${state.studentData.length} students`;
+            elements.studentStatusChip.className = 'status-chip chip-students';
+        }
+    }
+
+    function applyWorkbookAppState(appState) {
+        if (!appState) return;
+        if (Array.isArray(appState.moduleTasks)) state.moduleTasks = appState.moduleTasks;
+        if (appState.deadlines) {
+            Object.assign(state.deadlines, appState.deadlines);
+            restoreDeadlines();
+        }
+        if (appState.settings) applyProgrammeSettings(appState.settings);
+        const marker = appState.markerName || (appState.academicContext && appState.academicContext.markerName);
+        if (marker && elements.markerName) elements.markerName.value = marker;
+    }
+
+    // Read Excel/CSV — Full Data + App State + Summary when present
+    function readWorkbookFile(file) {
         return new Promise((resolve, reject) => {
             const reader = new FileReader();
             reader.onload = (e) => {
                 try {
                     const data = new Uint8Array(e.target.result);
                     const workbook = XLSX.read(data, { type: 'array' });
-                    const sheetName = workbook.SheetNames.includes('Full Data')
+                    const sheetNames = workbook.SheetNames || [];
+                    const sheetName = sheetNames.includes('Full Data')
                         ? 'Full Data'
-                        : workbook.SheetNames[0];
-                    const rows = XLSX.utils.sheet_to_json(workbook.Sheets[sheetName]);
-                    // Try to restore app state (tasks, deadlines, settings)
+                        : sheetNames[0];
+                    const rows = sheetName ? XLSX.utils.sheet_to_json(workbook.Sheets[sheetName]) : [];
                     let appState = null;
-                    if (workbook.SheetNames.includes('App State')) {
+                    if (sheetNames.includes('App State')) {
                         try {
                             const asRows = XLSX.utils.sheet_to_json(workbook.Sheets['App State']);
                             if (asRows.length && asRows[0].AppState) {
                                 appState = JSON.parse(asRows[0].AppState);
                             }
-                        } catch(_) {}
+                        } catch (_) {}
                     }
-                    resolve({ rows, appState });
+                    let summaryRows = [];
+                    if (sheetNames.includes('Summary')) {
+                        try { summaryRows = XLSX.utils.sheet_to_json(workbook.Sheets['Summary']); } catch (_) {}
+                    }
+                    resolve({ rows, appState, summaryRows, sheetNames, workbook });
                 } catch (error) {
                     reject(error);
                 }
@@ -1457,8 +1925,27 @@ document.addEventListener('DOMContentLoaded', () => {
     //     }));
     // }
 
-    function processStudentData(rawData) {
+    function processStudentData(rawData, options) {
+        const namesOnly = options && options.namesOnly;
         return rawData.map(row => {
+            if (namesOnly) {
+                const basic = WorkbookRestore.namesOnlyFromRow(row);
+                return {
+                    id: basic.id,
+                    name: basic.name,
+                    score: 0,
+                    status: 'registered',
+                    committedStatus: 'registered',
+                    nonSubmission: false,
+                    feedback: '',
+                    issues: [],
+                    ecDetails: {},
+                    resitDetails: {},
+                    timeline: [],
+                    qualityAcknowledgements: {},
+                    rubricData: { scores: [], selectedFeedback: [], criteriaComments: {}, notAttempted: [], overallComments: '' }
+                };
+            }
             // Parse rubric data if it exists
             let rubricData = null;
             if (row['Rubric Data']) {
@@ -2115,6 +2602,19 @@ document.addEventListener('DOMContentLoaded', () => {
             .then(text => {
                 elements.rubricInput.value = text;
                 loadRubric();
+                window.setRubricIdentity({
+                    partnerId: 'Ulster',
+                    partnerName: 'Ulster University',
+                    programmeId: 'MSc_Computer_Science',
+                    programmeName: 'MSc Computer Science',
+                    moduleId: 'COM745',
+                    moduleCode: 'COM745',
+                    moduleTitle: 'Big Data and Infrastructure',
+                    assessmentId: 'CW2',
+                    assessmentName: 'Coursework 2',
+                    rubricFile: 'CW2_Rubric.md',
+                    rubricId: 'Ulster/MSc_Computer_Science/COM745/CW2_Rubric.md'
+                });
                 return fetch('./examples/COM745_SIG_Demo_Session.json');
             })
             .then(r => r && r.ok ? r.json() : null)
@@ -2145,6 +2645,36 @@ document.addEventListener('DOMContentLoaded', () => {
     // Make loadRubric and switchTab available globally (used by rubric-loader.js)
     window.loadRubric = loadRubric;
     window.switchTab  = switchTab;
+    window.__markingAppRestore = {
+        buildAcademicContext,
+        beginWorkbookRestore,
+        resolveAndRestore,
+        commitRestore,
+        continueRestoreWithRubric,
+        processStudentData,
+        getState: function () {
+            const d9 = state.studentData.find(s => s.id === 'DEMO009');
+            const d10 = state.studentData.find(s => s.id === 'DEMO010');
+            const d11 = state.studentData.find(s => s.id === 'DEMO011');
+            return {
+                module: state.currentRubric?.metadata?.module_code || '',
+                assessment: state.currentRubric?.metadata?.course_work || '',
+                identity: state.rubricIdentity,
+                studentCount: state.studentData.length,
+                programmeLevel: state.settings.programmeLevel,
+                passMark: getPassMark(),
+                criterionCount: state.currentRubric ? state.currentRubric.criteria.length : 0,
+                taskCount: (state.moduleTasks || []).length,
+                demo009: d9 ? { score: d9.score, status: d9.status, capped: !!(d9.resitDetails && d9.resitDetails.capped) } : null,
+                demo010na: d10 ? !!(d10.rubricData && d10.rubricData.notAttempted && d10.rubricData.notAttempted[6]) : null,
+                demo011ns: d11 ? !!d11.nonSubmission : null,
+                university: document.getElementById('universitySelect')?.value || '',
+                programme: document.getElementById('programSelect')?.value || '',
+                moduleSelect: document.getElementById('moduleSelect')?.value || '',
+                component: document.getElementById('componentSelect')?.value || ''
+            };
+        }
+    };
 
     // ── Setup panel collapse / expand ─────────────────────────────────────
     function collapseSetup() {
@@ -3747,10 +4277,14 @@ document.addEventListener('DOMContentLoaded', () => {
             const sd     = pcts.length ? Math.sqrt(pcts.reduce((s, v) => s + (v - mean) ** 2, 0) / pcts.length) : 0;
             const passN  = recPcts.filter(p => p >= pass).length;
             const failN  = recPcts.filter(p => p < pass).length;
+            const ctxMeta = buildAcademicContext();
             const summaryRows = [
-                { 'Metric': 'Module',         'Value': state.currentRubric?.metadata?.module_code || '—' },
-                { 'Metric': 'Module Title',   'Value': state.currentRubric?.metadata?.module_title || '—' },
-                { 'Metric': 'Assessment',     'Value': state.currentRubric?.metadata?.course_work || '—' },
+                { 'Metric': 'Partner',        'Value': ctxMeta.partnerName || '—' },
+                { 'Metric': 'Programme',      'Value': ctxMeta.programmeName || '—' },
+                { 'Metric': 'Module',         'Value': ctxMeta.moduleCode || state.currentRubric?.metadata?.module_code || '—' },
+                { 'Metric': 'Module Title',   'Value': ctxMeta.moduleTitle || state.currentRubric?.metadata?.module_title || '—' },
+                { 'Metric': 'Assessment',     'Value': ctxMeta.assessmentName || state.currentRubric?.metadata?.course_work || '—' },
+                { 'Metric': 'RubricId',       'Value': ctxMeta.rubricId || '—' },
                 { 'Metric': 'Semester',       'Value': state.currentRubric?.metadata?.semester || '—' },
                 { 'Metric': 'Marker',         'Value': document.getElementById('markerName')?.value.trim() || '—' },
                 { 'Metric': 'Programme / Pass', 'Value': (state.settings.programmeLevel || 'msc').toUpperCase() + ' / ' + pass + '%' },
@@ -3959,10 +4493,15 @@ document.addEventListener('DOMContentLoaded', () => {
             // ── App State sheet (hidden JSON for full re-import) ───────────
             const appStateWs = XLSX.utils.json_to_sheet([{
                 'AppState': JSON.stringify({
+                    kind:        WorkbookRestore.SESSION_KIND,
+                    version:     3,
                     moduleTasks: state.moduleTasks,
                     deadlines:   state.deadlines,
                     settings:    state.settings,
-                    version:     2
+                    academicContext: buildAcademicContext(),
+                    rubricMarkdown: (elements.rubricInput && elements.rubricInput.value) || '',
+                    markerName:  elements.markerName?.value.trim() || '',
+                    savedAt:     new Date().toISOString()
                 })
             }]);
 

@@ -70,10 +70,11 @@
           <select id="moduleSelect"    disabled class="setup-select mt-1"><option value="">Module</option></select>
           <select id="componentSelect" disabled class="setup-select mt-1"><option value="">Component</option></select>
 
-          <div class="sb-sub-label mt-3">Student List</div>
-          <p class="sb-hint">Excel/CSV · columns: <strong>Student ID</strong>, <strong>Name</strong></p>
+          <div class="sb-sub-label mt-3">Students &amp; session</div>
+          <p class="sb-hint">Student list: <strong>Student ID</strong>, <strong>Name</strong>. Restore uses a workbook exported by this app.</p>
           <input type="file" id="studentFileUpload" accept=".xlsx,.xls,.csv" style="display:none">
-          <button id="loadStudentsBtn" class="btn-action w-full mt-1">📥 Import Students</button>
+          <button id="loadStudentsBtn" class="btn-action w-full mt-1" title="Import names into the currently loaded module/rubric">📥 Import Student List</button>
+          <button id="restoreWorkbookBtn" class="btn-nav w-full mt-1" title="Restore a marking workbook exported by this app, including the matching rubric">♻ Restore Marking Workbook</button>
         </div>
       </details>
     </div>
@@ -282,8 +283,8 @@ partner: Ulster University
           <div class="home-step">
             <div class="step-num">3</div>
             <div class="step-body">
-              <div class="step-title">Import Student List <span class="step-badge step-optional">Optional</span></div>
-              <p class="step-desc">Upload an Excel (.xlsx) or CSV file with at least two columns: <strong>Student ID</strong> and <strong>Name</strong>. You can also re-import a previously saved session — the app automatically reads the Full Data sheet and restores all marks, feedback, statuses and issues. Skip this step if marking anonymously or testing a rubric.</p>
+              <div class="step-title">Import Students or Restore a Workbook <span class="step-badge step-optional">Optional</span></div>
+              <p class="step-desc"><strong>Import Student List</strong> adds names to the currently loaded module. <strong>Restore Marking Workbook</strong> reopens a workbook previously exported by this app and automatically restores the partner, programme, module, rubric and marks. Do not restore a marking workbook onto a different rubric — the app will load the saved rubric first.</p>
             </div>
           </div>
 
@@ -863,6 +864,21 @@ partner: Ulster University
 </div>
 
 
+<!-- Workbook restore confirmation -->
+<div id="workbookRestoreModal" class="modal-overlay" style="display:none;">
+  <div class="modal-box" style="max-width:500px;">
+    <div class="modal-header wb-restore-header">
+      <span id="wbRestoreTitle">MARKING WORKBOOK RECOGNISED</span>
+      <button id="wbRestoreClose" class="modal-close">✕</button>
+    </div>
+    <div class="modal-body">
+      <div id="wbRestoreBody"></div>
+    </div>
+    <div class="modal-footer-bar" id="wbRestoreActions"></div>
+  </div>
+</div>
+
+
 <!-- Hidden Blackboard copy target -->
 <div id="bbHiddenCopy" contenteditable="true"
   style="position:absolute;left:-9999px;white-space:pre-wrap;"></div>
@@ -877,8 +893,9 @@ partner: Ulster University
 <script src="https://cdn.jsdelivr.net/npm/docx@7.8.2/build/index.js"></script>
 <script src="./assets/docx-library.js"></script>
 <script src="./js/academic-rules.js"></script>
-<script src="./js/script.js"></script>
-<script src="./js/rubric-loader.js"></script>
+<script src="./js/workbook-restore.js?v=3"></script>
+<script src="./js/script.js?v=3"></script>
+<script src="./js/rubric-loader.js?v=3"></script>
 </body>
 
 </html>

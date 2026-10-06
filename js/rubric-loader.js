@@ -1,8 +1,10 @@
 class RubricLoader {
     constructor() {
         this.basePath = 'rubrics';
+        this._catalog = null;
         this.initEventListeners();
-        this.loadUniversities();
+        this.ready = this.loadUniversities();
+        window.rubricLoader = this;
     }
 
     initEventListeners() {
@@ -120,43 +122,134 @@ class RubricLoader {
         }
     }
 
-    async loadSelectedRubric(filename) {
+    async fetchRubricText(rubricId) {
+        const rel = String(rubricId || '').replace(/^rubrics\//, '');
+        if (!rel) return null;
+        if (typeof window.__rubricFetchOverride === 'function') {
+            return window.__rubricFetchOverride(`${this.basePath}/${rel}`);
+        }
+        const response = await fetch(`${this.basePath}/${rel}`);
+        if (!response.ok) return null;
+        return response.text();
+    }
+
+    async getCatalog() {
+        if (this._catalog) return this._catalog;
+        const catalog = [];
+        try {
+            const unis = await (await fetch(`${this.basePath}/index.json`)).json();
+            for (const u of unis) {
+                const programs = await (await fetch(`${this.basePath}/${u.id}/index.json`)).json();
+                for (const p of programs) {
+                    const modules = await (await fetch(`${this.basePath}/${u.id}/${p.id}/index.json`)).json();
+                    for (const m of modules) {
+                        const comps = await (await fetch(`${this.basePath}/${u.id}/${p.id}/${m.id}/index.json`)).json();
+                        for (const c of comps) {
+                            const file = c.file || c.id;
+                            catalog.push({
+                                partnerId: u.id,
+                                partnerName: u.name,
+                                programmeId: p.id,
+                                programmeName: p.name,
+                                moduleCode: m.code || m.id,
+                                moduleTitle: m.name,
+                                assessmentId: c.id,
+                                assessmentName: c.name,
+                                rubricFile: file,
+                                rubricId: `${u.id}/${p.id}/${m.id}/${file}`
+                            });
+                        }
+                    }
+                }
+            }
+        } catch (error) {
+            console.error('Error building rubric catalog:', error);
+        }
+        this._catalog = catalog;
+        return catalog;
+    }
+
+    async syncDropdowns(identity) {
+        await this.ready;
+        const univId = identity && identity.partnerId;
+        const programId = identity && identity.programmeId;
+        const moduleId = identity && (identity.moduleId || identity.moduleCode);
+        const filename = identity && identity.rubricFile;
+        if (!univId) return false;
+
+        const univ = document.getElementById('universitySelect');
+        if (!univ) return false;
+        univ.value = univId;
+        await this.loadPrograms();
+
+        if (programId) {
+            const prog = document.getElementById('programSelect');
+            if (prog) prog.value = programId;
+            await this.loadModules();
+        }
+        if (moduleId) {
+            const mod = document.getElementById('moduleSelect');
+            if (mod) mod.value = moduleId;
+            await this.loadComponents();
+        }
+        if (filename) {
+            const comp = document.getElementById('componentSelect');
+            if (comp) comp.value = filename;
+        }
+        return true;
+    }
+
+    async loadSelectedRubric(filename, options) {
         if (!filename) return;
-        
+        const opts = options || {};
+
         try {
             const univId = document.getElementById('universitySelect')?.value;
             const programId = document.getElementById('programSelect')?.value;
             const moduleId = document.getElementById('moduleSelect')?.value;
-            
+
             if (!univId || !programId || !moduleId) return;
-            
-            // Remove the .md extension from file name, else github wont be able to access the file
-            //const isGitHubPages = location.hostname.includes('github.io');
-            //const cleanFilename = isGitHubPages ? filename.replace(/\.md$/i, '') : filename;        
-            //const rubricPath = `${this.basePath}/${univId}/${programId}/${moduleId}/${cleanFilename}`;
 
             const rubricPath = `${this.basePath}/${univId}/${programId}/${moduleId}/${filename}`;
-            //const rubricPath = `./CW2_Rubric`
-            const response = await fetch(rubricPath);
-            console.log('Fetching rubric from:', rubricPath); // Debug log
-            
-            if (!response.ok) {
+            const rubricText = await this.fetchRubricText(`${univId}/${programId}/${moduleId}/${filename}`);
+            console.log('Fetching rubric from:', rubricPath);
+
+            if (!rubricText) {
                 console.warn(`Rubric file not found: ${rubricPath}`);
-                alert(`The selected rubric template isn't available. Please try another or contact support.`);
-                return; // Exit gracefully instead of throwing error
+                if (!opts.silent) {
+                    alert(`The selected rubric template isn't available. Please try another or contact support.`);
+                }
+                return false;
             }
-            
-            const rubricText = await response.text();
-            //console.log(rubricText)
+
+            if (typeof window.setRubricIdentity === 'function') {
+                window.setRubricIdentity({
+                    partnerId: univId,
+                    partnerName: document.getElementById('universitySelect')?.selectedOptions?.[0]?.textContent || '',
+                    programmeId: programId,
+                    programmeName: document.getElementById('programSelect')?.selectedOptions?.[0]?.textContent || '',
+                    moduleId,
+                    moduleCode: moduleId,
+                    moduleTitle: document.getElementById('moduleSelect')?.selectedOptions?.[0]?.textContent || '',
+                    assessmentId: filename.replace(/_Rubric\.md$/i, '').replace(/\.md$/i, ''),
+                    assessmentName: document.getElementById('componentSelect')?.selectedOptions?.[0]?.textContent || filename,
+                    rubricFile: filename,
+                    rubricId: `${univId}/${programId}/${moduleId}/${filename}`
+                });
+            }
+
             document.getElementById('rubricInput').value = rubricText;
 
             if (typeof window.loadRubric === 'function') {
                 const success = window.loadRubric();
-                if (success) window.switchTab?.('mark');
+                if (success && !opts.skipTabSwitch) window.switchTab?.('mark');
+                return success;
             }
+            return true;
         } catch (error) {
             console.error('Error loading rubric:', error);
-            alert('Failed to load rubric. Please check your selection.');
+            if (!opts.silent) alert('Failed to load rubric. Please check your selection.');
+            return false;
         }
     }
 
@@ -217,8 +310,7 @@ class RubricLoader {
 
 // Call it when the page loads - add this too
 document.addEventListener('DOMContentLoaded', () => {
-    new RubricLoader();
-   // checkRubricFiles();  // Add this line to call the debug function
+    window.rubricLoader = new RubricLoader();
 });
 
 // // Initialize when DOM is loaded

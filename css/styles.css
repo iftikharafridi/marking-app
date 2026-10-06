@@ -2470,6 +2470,52 @@ body.app-shell .comments-textarea {
   font-weight: 700;
 }
 
+.modal-header.wb-restore-header { background: #5d3b8e; }
+.wb-restore-kicker {
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  color: #5d3b8e;
+  text-transform: uppercase;
+}
+.wb-restore-context {
+  font-size: 12px;
+  line-height: 1.5;
+  color: #111827;
+}
+.wb-restore-meta {
+  font-size: 11px;
+  color: #4b5563;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+.wb-restore-warn {
+  background: #fffbeb;
+  border: 1px solid #f59e0b;
+  color: #92400e;
+  padding: 8px 10px;
+  border-radius: 6px;
+  font-size: 11px;
+}
+.wb-restore-stop {
+  background: #fef2f2;
+  border: 1px solid #ef4444;
+  color: #991b1b;
+  padding: 8px 10px;
+  border-radius: 6px;
+  font-size: 11px;
+}
+.wb-restore-diff {
+  font-size: 11px;
+  background: #f9fafb;
+  border: 1px solid #e5e7eb;
+  border-radius: 6px;
+  padding: 8px 10px;
+  white-space: pre-wrap;
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+}
+
 /* ── Print styles ────────────────────────────────────────── */
 @media print {
   .session-banner, .left-sidebar, .tab-bar, .sidebar-lower,
