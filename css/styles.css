@@ -2524,7 +2524,4 @@ body.app-shell .comments-textarea {
   .right-area { width: 100% !important; }
   .tab-panel { display: block !important; }
 }
-/* Public SIG build: experimental AI Review hidden */
-#aiReviewBtn {
-    display: none !important;
-}
+
