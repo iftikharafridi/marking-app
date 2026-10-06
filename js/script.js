@@ -71,6 +71,91 @@ document.addEventListener('DOMContentLoaded', () => {
     const NS_LIKE_STATUSES = new Set(['ns', 'withdrawn', 'suspended']);
     const EC_STATUSES      = new Set(['ec_approved', 'ec_pending']);
     const RESIT_STATUSES   = new Set(['resit', 'repeat']);
+    const NOT_ATTEMPTED_FEEDBACK = 'This component was not attempted; therefore no marks were awarded.';
+    const STATUS_COMMIT_MS = 1000;
+    let statusCommitTimer = null;
+    let committingStatus = false;
+
+    function statusLabel(value) {
+        const sel = elements.statusSelect;
+        if (sel) {
+            const opt = Array.from(sel.options).find(o => o.value === value);
+            if (opt) {
+                let cleaned = opt.text.trim();
+                try { cleaned = opt.text.replace(/^[^\p{L}\p{N}]+/u, '').trim(); }
+                catch (_) { cleaned = opt.text.replace(/^[^A-Za-z0-9]+/, '').trim(); }
+                return cleaned || opt.text.trim();
+            }
+        }
+        return value || 'registered';
+    }
+
+    function parseScoreInput(input) {
+        if (!input) return null;
+        const raw = String(input.value).trim();
+        if (raw === '') return null;
+        const n = parseFloat(raw);
+        return Number.isFinite(n) ? n : null;
+    }
+
+    function storedScoreToInput(score) {
+        if (score === null || score === undefined || score === '') return '';
+        return score;
+    }
+
+    function isStudentFullyAssessed(student) {
+        if (!student || student.nonSubmission) return false;
+        if (!state.currentRubric) return !!(student.score > 0);
+        const n = state.currentRubric.criteria.length;
+        const scores = student.rubricData && student.rubricData.scores;
+        if (!scores) return false;
+        for (let i = 0; i < n; i++) {
+            if (AcademicRules.isCriterionNotAttempted(student, i)) continue;
+            if (scores[i] === null || scores[i] === undefined || scores[i] === '') return false;
+        }
+        return true;
+    }
+
+    function criterionExportCell(student, idx, crit) {
+        if (student.nonSubmission) return { score: 'NS', pct: 'NS', pct100: 'NS', attempt: 'NS' };
+        const na = AcademicRules.isCriterionNotAttempted(student, idx);
+        const val = AcademicRules.criterionScoreValue(student, idx);
+        if (na) {
+            return {
+                score: 0,
+                pct: crit.maxScore > 0 ? formatPercent(0, crit.maxScore) : '',
+                pct100: crit.maxScore > 0 ? parseFloat(toPercent(0, crit.maxScore).toFixed(1)) : '',
+                attempt: 'Not Attempted'
+            };
+        }
+        if (val === null) {
+            return { score: '—', pct: '—', pct100: '—', attempt: 'Unmarked' };
+        }
+        return {
+            score: val,
+            pct: crit.maxScore > 0 ? formatPercent(val, crit.maxScore) : '',
+            pct100: crit.maxScore > 0 ? parseFloat(toPercent(val, crit.maxScore).toFixed(1)) : '',
+            attempt: 'Assessed'
+        };
+    }
+
+    function currentMaxScore() {
+        if (!state.currentRubric) return 0;
+        return state.currentRubric.criteria.reduce((sum, c) => sum + (c.maxScore || 0), 0);
+    }
+
+    function studentMarkSummary(student) {
+        return AcademicRules.markSummary(student, currentMaxScore(), getPassMark());
+    }
+
+    function effectiveAcknowledgements(student) {
+        const acks = student && student.qualityAcknowledgements;
+        if (!acks || !acks.borderlineReviewed) return {};
+        const summary = studentMarkSummary(student);
+        if (acks.acknowledgedZone && acks.acknowledgedZone !== summary.rawZone.zone) return {};
+        if (typeof acks.acknowledgedPct === 'number' && Math.abs(acks.acknowledgedPct - summary.rawPct) > 0.2) return {};
+        return acks;
+    }
 
 
     // // Initialize the application
@@ -98,8 +183,8 @@ document.addEventListener('DOMContentLoaded', () => {
         elements.studentSelect?.addEventListener('change', (e) => {
             const selectedIndex = parseInt(e.target.value);
             if (!isNaN(selectedIndex) && selectedIndex >= 0) {
-                // Save current student before loading new one
-                if (state.currentStudentIndex >= 0) {
+                if (state.currentStudentIndex >= 0 && selectedIndex !== state.currentStudentIndex) {
+                    commitStudentStatus();
                     saveStudentFeedback();
                 }
                 state.currentStudentIndex = selectedIndex;
@@ -132,10 +217,23 @@ document.addEventListener('DOMContentLoaded', () => {
             const customRow = document.getElementById('customPassMarkRow');
             if (customRow) customRow.style.display = e.target.value === 'custom' ? 'flex' : 'none';
             updateScores();
+            saveToLocalStorage();
+            if (document.getElementById('tab-analytics')?.style.display !== 'none') renderAnalyticsTab();
+            if (document.getElementById('tab-students')?.style.display !== 'none') renderStudentsTab();
         });
         document.getElementById('customPassMark')?.addEventListener('input', e => {
             state.settings.customPassMark = parseFloat(e.target.value) || 50;
             updateScores();
+            saveToLocalStorage();
+            if (document.getElementById('tab-analytics')?.style.display !== 'none') renderAnalyticsTab();
+        });
+
+        ['resitCapped', 'resitPrevMark', 'resitAttemptNum'].forEach(id => {
+            document.getElementById(id)?.addEventListener('change', () => {
+                if (state.currentStudentIndex < 0) return;
+                saveStudentFeedback();
+                updateScores();
+            });
         });
 
         // Overall comments
@@ -225,6 +323,17 @@ document.addEventListener('DOMContentLoaded', () => {
                     elements.issueType.value === 'misconduct' ? 'flex' : 'none';
         });
         elements.addIssueBtn?.addEventListener('click', addIssue);
+
+        document.getElementById('qualityCheckBtn')?.addEventListener('click', runMarkingQualityCheck);
+        window.addEventListener('pagehide', () => commitStudentStatus());
+        document.getElementById('ackBoundaryBtn')?.addEventListener('click', acknowledgeBoundaryReview);
+        document.getElementById('aiReviewBtn')?.addEventListener('click', openAiReviewModal);
+        document.getElementById('aiReviewClose')?.addEventListener('click', closeAiReviewModal);
+        document.getElementById('aiReviewCancel')?.addEventListener('click', closeAiReviewModal);
+        document.getElementById('aiReviewCopyBtn')?.addEventListener('click', copyAiReviewPrompt);
+        document.getElementById('aiReviewModal')?.addEventListener('click', e => {
+            if (e.target === document.getElementById('aiReviewModal')) closeAiReviewModal();
+        });
 
         // Hide context menu on any click/scroll
         document.addEventListener('click', hideContextMenu);
@@ -486,9 +595,13 @@ document.addEventListener('DOMContentLoaded', () => {
                     <div class="criteria-score">
                         ${criterion.maxScore > 0 ? `
                             <input type="number" min="0" max="${criterion.maxScore}" 
-                                   value="0" class="score-input w-20 px-2 py-1 border border-gray-400 rounded text-gray-900 bg-white text-[11px]">
+                                   value="" placeholder="—" class="score-input w-20 px-2 py-1 border border-gray-400 rounded text-gray-900 bg-white text-[11px]">
                             <span>/ ${criterion.maxScore}</span>
                             <span class="score-pct" title="Equivalent percentage out of 100"></span>
+                            <label class="not-attempted-label" title="Award 0 because this component was not attempted. A typed 0 alone is an assessed mark, not Not Attempted.">
+                                <input type="checkbox" class="not-attempted-cb" data-crit="${critIndex}">
+                                Not Attempted
+                            </label>
                         ` : ''}
                     </div>
                 </div>
@@ -544,6 +657,13 @@ document.addEventListener('DOMContentLoaded', () => {
             input.addEventListener('input', handler);
             state.eventListeners.set(input, { type: 'input', handler });
             state.eventListenerRefs.push({ element: input, type: 'input', handler });
+        });
+
+        document.querySelectorAll('.not-attempted-cb').forEach(checkbox => {
+            const handler = (e) => handleNotAttemptedChange(e);
+            checkbox.addEventListener('change', handler);
+            state.eventListeners.set(checkbox, { type: 'change', handler });
+            state.eventListenerRefs.push({ element: checkbox, type: 'change', handler });
         });
 
         // Feedback checkboxes
@@ -630,6 +750,41 @@ document.addEventListener('DOMContentLoaded', () => {
         elements.maxScore.textContent = maxScore;
     }
 
+    function handleNotAttemptedChange(e) {
+        const card = e.target.closest('.criteria-card');
+        if (!card) return;
+        applyNotAttemptedUI(card, e.target.checked);
+        updateScores();
+        updateScoringProgress();
+        if (state.currentStudentIndex >= 0) saveStudentFeedback();
+    }
+
+    function applyNotAttemptedUI(card, checked) {
+        if (!card) return;
+        const input = card.querySelector('.score-input');
+        const ta = card.querySelector('.comments-textarea');
+        const nsLocked = !!(elements.rubricContainer && elements.rubricContainer.classList.contains('rubric-ns-overlay'));
+        if (input) {
+            if (checked) input.value = '0';
+            input.disabled = checked || nsLocked;
+        }
+        card.classList.toggle('not-attempted', !!checked);
+        if (checked && ta && !ta.value.trim()) {
+            ta.value = NOT_ATTEMPTED_FEEDBACK;
+        }
+    }
+
+    function restoreNotAttemptedUI(student) {
+        const na = student && student.rubricData && student.rubricData.notAttempted;
+        document.querySelectorAll('.criteria-card').forEach(card => {
+            const idx = parseInt(card.dataset.index, 10);
+            const checked = !!(na && (Array.isArray(na) ? na[idx] : na[idx]));
+            const cb = card.querySelector('.not-attempted-cb');
+            if (cb) cb.checked = checked;
+            applyNotAttemptedUI(card, checked);
+        });
+    }
+
     // Update scores and percentages
     function updateScores() {
         if (!state.currentRubric) return;
@@ -638,27 +793,31 @@ document.addEventListener('DOMContentLoaded', () => {
         let maxPossibleScore = 0;
 
         state.currentRubric.criteria.forEach((criterion, index) => {
-            const scoreInput = document.querySelector(
-                `.criteria-card[data-index="${index}"] .score-input`
-            );
-            const score = parseFloat(scoreInput?.value) || 0;
+            const card = document.querySelector(`.criteria-card[data-index="${index}"]`);
+            const scoreInput = card ? card.querySelector('.score-input') : null;
+            const na = !!(card && card.querySelector('.not-attempted-cb')?.checked);
+            const raw = na ? 0 : parseScoreInput(scoreInput);
+            const score = raw === null ? 0 : raw;
             const maxScore = criterion.maxScore || 0;
             const clamped = score > maxScore ? maxScore : score;
 
             // Validate score doesn't exceed max
-            if (score > maxScore && scoreInput) {
+            if (raw !== null && score > maxScore && scoreInput) {
                 scoreInput.value = maxScore;
             }
             totalScore += clamped;
             maxPossibleScore += maxScore;
 
-            const pctEl = document.querySelector(
-                `.criteria-card[data-index="${index}"] .score-pct`
-            );
+            const pctEl = card ? card.querySelector('.score-pct') : null;
             if (pctEl) {
-                const pctLabel = criterionPercentLabel(clamped, maxScore);
-                pctEl.textContent = pctLabel ? `= ${pctLabel}` : '';
-                pctEl.style.display = pctLabel ? '' : 'none';
+                if (!na && raw === null) {
+                    pctEl.textContent = '';
+                    pctEl.style.display = 'none';
+                } else {
+                    const pctLabel = criterionPercentLabel(clamped, maxScore);
+                    pctEl.textContent = pctLabel ? `= ${pctLabel}` : '';
+                    pctEl.style.display = pctLabel ? '' : 'none';
+                }
             }
         });
 
@@ -672,53 +831,36 @@ document.addEventListener('DOMContentLoaded', () => {
 
         elements.percentage.textContent = percentage;
 
-        // Resit cap display
+        // Resit cap display — never silently replace the academic mark
         const student = state.currentStudentIndex >= 0 ? state.studentData[state.currentStudentIndex] : null;
-        const isCapped = student && RESIT_STATUSES.has(student.status) && student.resitDetails?.capped;
+        const isCapped = AcademicRules.isCappedResit(student);
         const capPct   = getPassMark();
+        const rawPct   = parseFloat(percentage) || 0;
+        const recordedPct = isCapped ? Math.min(rawPct, capPct) : rawPct;
         const capEl    = document.getElementById('resitCapNote');
         if (capEl) {
-            if (isCapped && parseFloat(percentage) > capPct) {
-                capEl.textContent  = `↺ Capped at ${capPct}% (actual: ${percentage}%)`;
+            if (isCapped) {
+                capEl.textContent = rawPct > capPct
+                    ? `Academic ${rawPct.toFixed(1)}% → Recorded ${recordedPct.toFixed(1)}% (capped at ${capPct}%)`
+                    : `Capped resit · recorded ${recordedPct.toFixed(1)}%`;
                 capEl.style.display = 'inline-block';
             } else {
                 capEl.style.display = 'none';
             }
         }
 
-        const displayPct = isCapped ? Math.min(parseFloat(percentage), capPct) : parseFloat(percentage);
-
-        // Update feedback text and save to current student
+        // Boundary review uses the academic (raw) mark so the work is not hidden by the cap
         updateFeedbackText();
-        updateBoundaryDisplay(displayPct);
+        updateBoundaryDisplay(rawPct);
     }
 
     // ── Mark boundary classification ──────────────────────────────────────
     function getPassMark() {
-        const lvl = state.settings.programmeLevel;
-        if (lvl === 'bsc') return 40;
-        if (lvl === 'custom') return state.settings.customPassMark || 50;
-        return 50; // msc default
+        return AcademicRules.getPassMark(state.settings);
     }
 
     function classifyMark(pct) {
-        const pass = getPassMark();
-        const condStart     = pass - 5;      // clear fail / condoned boundary
-        const borderlineStart = pass - 1.5;  // condoned / borderline-pass boundary
-
-        if (pct >= 70)   return { zone: 'distinction',           label: 'Distinction',             guidance: null };
-        if (pct >= 68.5) return { zone: 'borderline-distinction', label: 'Near Distinction ▲',
-            guidance: `Student is close to Distinction boundary (70%). Review if assessment evidence supports the higher band.` };
-        if (pct >= 60)   return { zone: 'merit',                 label: 'Merit',                   guidance: null };
-        if (pct >= 58.5) return { zone: 'borderline-merit',      label: 'Near Merit ▲',
-            guidance: `Student is close to Merit boundary (60%). Please double-check rubric consistency.` };
-        if (pct >= pass) return { zone: 'pass',                  label: 'Pass',                    guidance: null };
-        if (pct >= borderlineStart) return { zone: 'borderline-pass', label: 'Borderline Pass ⚠',
-            guidance: `Student is within 1.5 marks of the pass threshold (${pass}%). Please review for possible borderline consideration.` };
-        if (pct >= condStart) return { zone: 'condoned-fail',    label: 'Condoned Fail Zone ⚠',
-            guidance: `Student falls within the condonable fail range (${condStart}–${pass - 0.01}%). Review programme regulations and overall performance.` };
-        return { zone: 'fail', label: 'Fail ✗',
-            guidance: `Student has failed this assessment. Score is below the pass threshold (${pass}%).` };
+        return AcademicRules.classifyMark(pct, getPassMark());
     }
 
     function updateBoundaryDisplay(pct) {
@@ -732,12 +874,21 @@ document.addEventListener('DOMContentLoaded', () => {
             return;
         }
 
-        const { zone, label, guidance } = classifyMark(pct);
+        const { zone, label, guidance, requiresReview } = classifyMark(pct);
         badge.textContent  = label;
         badge.className    = `boundary-badge-pill zone-${zone}`;
         msg.textContent    = guidance || '';
         row.className      = `boundary-row${guidance ? ' guidance-' + zone : ''}`;
         row.style.display  = 'flex';
+
+        const ackBtn = document.getElementById('ackBoundaryBtn');
+        if (ackBtn) {
+            const student = state.currentStudentIndex >= 0 ? state.studentData[state.currentStudentIndex] : null;
+            const acked = student && effectiveAcknowledgements(student).borderlineReviewed;
+            ackBtn.style.display = requiresReview && student && !student.nonSubmission ? '' : 'none';
+            ackBtn.textContent = acked ? 'Review acknowledged' : 'Acknowledge review';
+            ackBtn.disabled = !!acked;
+        }
     }
 
     // function restoreStudentData() {
@@ -781,8 +932,9 @@ document.addEventListener('DOMContentLoaded', () => {
             // Restore scores
             student.rubricData.scores?.forEach((score, index) => {
                 const input = document.querySelector(`.criteria-card[data-index="${index}"] .score-input`);
-                if (input) input.value = score;
+                if (input) input.value = storedScoreToInput(score);
             });
+            restoreNotAttemptedUI(student);
 
             // Restore checkboxes
             student.rubricData.selectedFeedback?.forEach(({ critIndex, subIndex, pointIndex }) => {
@@ -899,13 +1051,22 @@ document.addEventListener('DOMContentLoaded', () => {
         let maxScore = state.currentRubric.criteria.reduce((sum, criterion) => sum + criterion.maxScore, 0);
 
         state.currentRubric.criteria.forEach((criterion, critIndex) => {
-            const scoreInput = document.querySelector(`.criteria-card[data-index="${critIndex}"] .score-input`);
-            const score = parseFloat(scoreInput?.value) || 0;
+            const card = document.querySelector(`.criteria-card[data-index="${critIndex}"]`);
+            const scoreInput = card ? card.querySelector('.score-input') : null;
+            const na = !!(card && card.querySelector('.not-attempted-cb')?.checked);
+            const raw = na ? 0 : parseScoreInput(scoreInput);
+            const score = raw === null ? 0 : raw;
             totalScore += score;
 
             // Criterion title, raw score, and equivalent % out of 100 when not already /100
             const pctLabel = criterionPercentLabel(score, criterion.maxScore);
-            feedbackText += `${criterion.title}: [${score.toFixed(1)}/${criterion.maxScore}]${pctLabel ? ` (${pctLabel})` : ''}\n`;
+            if (na) {
+                feedbackText += `${criterion.title}: [0.0/${criterion.maxScore}] (Not Attempted)\n`;
+            } else if (raw === null) {
+                feedbackText += `${criterion.title}: [unmarked/${criterion.maxScore}]\n`;
+            } else {
+                feedbackText += `${criterion.title}: [${score.toFixed(1)}/${criterion.maxScore}]${pctLabel ? ` (${pctLabel})` : ''}\n`;
+            }
 
             // Selected feedback points
             const selectedPoints = [];
@@ -1341,6 +1502,11 @@ document.addEventListener('DOMContentLoaded', () => {
             let timeline = [];
             try { if (row['Timeline']) timeline = JSON.parse(row['Timeline']); } catch(_) {}
 
+            let qualityAcknowledgements = {};
+            try { if (row['Quality Acknowledgements']) qualityAcknowledgements = JSON.parse(row['Quality Acknowledgements']); } catch(_) {}
+
+            const committedStatus = row['Committed Status'] || status;
+
             return {
                 id: row['Student ID'] || row['ID'] || '',
                 name: row['Name'] || row['Student Name'] || '',
@@ -1352,10 +1518,13 @@ document.addEventListener('DOMContentLoaded', () => {
                 ecDetails,
                 resitDetails,
                 timeline,
+                qualityAcknowledgements,
+                committedStatus,
                 rubricData: rubricData || {
                     scores: [],
                     selectedFeedback: [],
-                    criteriaComments: {}
+                    criteriaComments: {},
+                    notAttempted: []
                 }
             };
         });
@@ -1424,7 +1593,9 @@ document.addEventListener('DOMContentLoaded', () => {
         // Restore status for this student
         const studentStatus = student.status || (student.nonSubmission ? 'ns' : 'registered');
         student.status = studentStatus;
-        if (elements.statusSelect) elements.statusSelect.value = studentStatus;
+        if (!student.committedStatus) student.committedStatus = studentStatus;
+        cancelStatusCommit();
+        if (elements.statusSelect) elements.statusSelect.value = student.committedStatus || studentStatus;
         showStatusDetailPanels(studentStatus);
 
         // Restore EC details
@@ -1459,9 +1630,10 @@ document.addEventListener('DOMContentLoaded', () => {
         if (student.rubricData.scores) {
             student.rubricData.scores.forEach((score, index) => {
                 const input = document.querySelector(`.criteria-card[data-index="${index}"] .score-input`);
-                if (input) input.value = score;
+                if (input) input.value = storedScoreToInput(score);
             });
         }
+        restoreNotAttemptedUI(student);
 
         // Restore checkboxes
         if (student.rubricData.selectedFeedback) {
@@ -1503,7 +1675,14 @@ document.addEventListener('DOMContentLoaded', () => {
 
         // Clear all score inputs and hide converted percentages
         document.querySelectorAll('.score-input').forEach(input => {
-            input.value = 0;
+            input.value = '';
+            input.disabled = false;
+        });
+        document.querySelectorAll('.not-attempted-cb').forEach(cb => {
+            cb.checked = false;
+        });
+        document.querySelectorAll('.criteria-card').forEach(card => {
+            card.classList.remove('not-attempted');
         });
         document.querySelectorAll('.score-pct').forEach(el => {
             el.textContent = '';
@@ -1604,19 +1783,29 @@ document.addEventListener('DOMContentLoaded', () => {
         // Calculate total score
         let totalScore = 0;
         const scores = [];
+        const notAttempted = [];
 
-        document.querySelectorAll('.score-input').forEach(input => {
-            const score = parseFloat(input.value) || 0;
-            scores.push(score);
-            totalScore += score;
+        document.querySelectorAll('.criteria-card').forEach(card => {
+            const idx = parseInt(card.dataset.index, 10);
+            const na = !!card.querySelector('.not-attempted-cb')?.checked;
+            const raw = na ? 0 : parseScoreInput(card.querySelector('.score-input'));
+            notAttempted[idx] = na;
+            scores[idx] = na ? 0 : raw;
+            totalScore += (raw === null ? 0 : raw);
         });
 
-        // Update student data
-        student.status = elements.statusSelect?.value || 'registered';
+        // Update student data — exploratory status is not persisted until commit
+        const uiStatus = elements.statusSelect?.value || 'registered';
+        if (committingStatus) {
+            student.status = uiStatus;
+            student.committedStatus = uiStatus;
+        } else {
+            student.status = student.committedStatus || student.status || 'registered';
+        }
         student.nonSubmission = NS_LIKE_STATUSES.has(student.status);
 
         // Save EC details
-        if (EC_STATUSES.has(student.status)) {
+        if (EC_STATUSES.has(uiStatus) || EC_STATUSES.has(student.status)) {
             student.ecDetails = {
                 type:         document.getElementById('ecType')?.value || '',
                 approvalDate: document.getElementById('ecApprovalDate')?.value || '',
@@ -1625,7 +1814,7 @@ document.addEventListener('DOMContentLoaded', () => {
             };
         }
         // Save Resit details
-        if (RESIT_STATUSES.has(student.status)) {
+        if (RESIT_STATUSES.has(uiStatus) || RESIT_STATUSES.has(student.status)) {
             student.resitDetails = {
                 previousMark:  parseFloat(document.getElementById('resitPrevMark')?.value) || 0,
                 attemptNumber: parseInt(document.getElementById('resitAttemptNum')?.value)  || 2,
@@ -1646,6 +1835,7 @@ document.addEventListener('DOMContentLoaded', () => {
         student.rubricData = {
             rubric: state.currentRubric,
             scores: scores,
+            notAttempted: notAttempted,
             selectedFeedback: [],
             criteriaComments: {},
             overallComments: elements.overallComments?.value.trim() || ''
@@ -1883,16 +2073,20 @@ document.addEventListener('DOMContentLoaded', () => {
     // }
 
     function navigateStudent(direction) {
-        // Save current student's data before navigating
         if (state.currentStudentIndex >= 0) {
+            commitStudentStatus();
             saveStudentFeedback();
         }
+
+        if (direction > 0 && !qualityGateAllowsLeave()) return;
 
         const newIndex = state.currentStudentIndex + direction;
         if (newIndex >= 0 && newIndex < state.studentData.length) {
             state.currentStudentIndex = newIndex;
             elements.studentSelect.value = newIndex;
             loadStudentFeedback();
+            const qcPanel = document.getElementById('qualityCheckPanel');
+            if (qcPanel) qcPanel.style.display = 'none';
         }
     }
 
@@ -1907,62 +2101,44 @@ document.addEventListener('DOMContentLoaded', () => {
     function updateProgressIndicator() {
         if (!elements.progressIndicator) return;
         const nsCount      = state.studentData.filter(s => s.nonSubmission).length;
-        const markedCount  = state.studentData.filter(s => s.score > 0 && !s.nonSubmission).length;
+        const markedCount  = state.studentData.filter(s => isStudentFullyAssessed(s)).length;
         const totalCount   = state.studentData.length;
         let text = `${markedCount}/${totalCount} marked`;
         if (nsCount > 0) text += ` · ${nsCount} NS`;
         elements.progressIndicator.textContent = text;
     }
 
-    // Temporary test function
+    // Load the built-in COM745 CW2 rubric for the SIG demonstration (does not modify that file).
     function testRubricLoading() {
-        const testRubric = `
----
-module_code: COM692 (51726)
-module_title: Data Analytics
-tutor_name: Iftikhar Afridi
-semester: S3 2023-24
-partner: Ulster University
-// This is sample Rebric Template
----
-
-# Introduction [10]
-## Excellent (Marks: 8-10)
-- Test feedback point 1
-- Test feedback point 2
-
-## Good (Marks: 6-7)
-- Test feedback point 1
-- Test feedback point 2
-
-## Pass (Marks: 4-5)
-- Test feedback point 1
-- Test feedback point 2
-
-## Fail (Marks: 0-3)
-- Test feedback point 1
-- Test feedback point 2
-
-# Analysis [10]
-## Excellent (Marks: 8-10)
-- Test feedback point 1
-- Test feedback point 2
-
-## Good (Marks: 6-7)
-- Test feedback point 1
-- Test feedback point 2
-
-## Pass (Marks: 4-5)
-- Test feedback point 1
-- Test feedback point 2
-
-## Fail (Marks: 0-3)
-- Test feedback point 1
-- Test feedback point 2
-`;
-
-        elements.rubricInput.value = testRubric;
-        loadRubric();
+        fetch('./rubrics/Ulster/MSc_Computer_Science/COM745/CW2_Rubric.md')
+            .then(r => r.ok ? r.text() : Promise.reject())
+            .then(text => {
+                elements.rubricInput.value = text;
+                loadRubric();
+                return fetch('./examples/COM745_SIG_Demo_Session.json');
+            })
+            .then(r => r && r.ok ? r.json() : null)
+            .then(snap => {
+                if (!snap || !Array.isArray(snap.studentData) || !snap.studentData.length) return;
+                const reset = /(?:\?|&)demo=reset(?:&|$)/.test(location.search);
+                let existing = null;
+                try { existing = JSON.parse(localStorage.getItem(LS_KEY) || 'null'); } catch (_) {}
+                const alreadyDemo = !!(existing && existing.studentData && existing.studentData.some(s => s.id === 'DEMO001'));
+                if (!alreadyDemo || reset) {
+                    localStorage.setItem(LS_KEY, JSON.stringify(snap));
+                    existing = snap;
+                }
+                const banner = document.getElementById('sessionRestoreBanner');
+                const info = document.getElementById('sessionRestoreInfo');
+                if (banner && info && existing && existing.studentData) {
+                    info.textContent = `${existing.studentData.length} students · COM745 CW2 DEMO · fictitious SIG dataset`;
+                    banner.style.display = 'flex';
+                }
+            })
+            .catch(() => {
+                const fallback = document.getElementById('rubricInput')?.value;
+                if (fallback && fallback.trim()) loadRubric();
+            });
     }
 
 
@@ -1992,6 +2168,13 @@ partner: Ulster University
     }
 
     // ── Student status handling ───────────────────────────────────────────
+    function cancelStatusCommit() {
+        if (statusCommitTimer) {
+            clearTimeout(statusCommitTimer);
+            statusCommitTimer = null;
+        }
+    }
+
     function handleStatusChange() {
         if (state.currentStudentIndex < 0) {
             if (elements.statusSelect) elements.statusSelect.value = 'registered';
@@ -2001,13 +2184,38 @@ partner: Ulster University
         if (!student) return;
 
         const newStatus = elements.statusSelect?.value || 'registered';
-        student.status = newStatus;
-        student.nonSubmission = NS_LIKE_STATUSES.has(newStatus);
+        showStatusDetailPanels(newStatus);
+        setRubricInputsDisabled(NS_LIKE_STATUSES.has(newStatus));
+
+        cancelStatusCommit();
+        const committed = student.committedStatus || student.status || 'registered';
+        if (newStatus === committed) return;
+        statusCommitTimer = setTimeout(() => commitStudentStatus(), STATUS_COMMIT_MS);
+    }
+
+    function commitStudentStatus() {
+        cancelStatusCommit();
+        if (state.currentStudentIndex < 0) return;
+        const student = state.studentData[state.currentStudentIndex];
+        if (!student) return;
+
+        const from = student.committedStatus || student.status || 'registered';
+        const to = elements.statusSelect?.value || 'registered';
+        if (from === to) {
+            student.committedStatus = to;
+            student.status = to;
+            return;
+        }
+
+        committingStatus = true;
+        student.status = to;
+        student.committedStatus = to;
+        student.nonSubmission = NS_LIKE_STATUSES.has(to);
 
         if (student.nonSubmission) {
             clearAllSelections();
             student.score = 0;
-            const label = elements.statusSelect?.options[elements.statusSelect.selectedIndex]?.text || newStatus;
+            const label = statusLabel(to);
             student.feedback = `${label}: This student has not submitted any work for assessment.`;
             if (elements.finalOutput) elements.finalOutput.value = student.feedback;
             if (elements.totalScore) elements.totalScore.textContent = '0';
@@ -2019,15 +2227,13 @@ partner: Ulster University
             updateFeedbackText();
         }
 
-        // Log status change to student timeline
-        const statusLabel = elements.statusSelect?.options[elements.statusSelect.selectedIndex]?.text || newStatus;
-        logTimeline(student, 'status', `Status set to: ${statusLabel}`);
+        logTimeline(student, 'status', `Status changed: ${statusLabel(from)} → ${statusLabel(to)}`);
         renderStudentTimeline(student);
-
         updateStudentOptionLabel(state.currentStudentIndex);
         updateProgressIndicator();
-        showStatusDetailPanels(newStatus);
+        showStatusDetailPanels(to);
         saveStudentFeedback();
+        committingStatus = false;
     }
 
     function showStatusDetailPanels(status) {
@@ -2052,13 +2258,18 @@ partner: Ulster University
         } else {
             container.classList.remove('rubric-ns-overlay');
         }
-        container.querySelectorAll('.score-input, .feedback-item input[type="checkbox"], .select-all-checkbox, .comments-textarea').forEach(el => {
+        container.querySelectorAll('.feedback-item input[type="checkbox"], .select-all-checkbox, .comments-textarea, .not-attempted-cb').forEach(el => {
             el.disabled = disabled;
+        });
+        container.querySelectorAll('.score-input').forEach(el => {
+            const na = el.closest('.criteria-card')?.querySelector('.not-attempted-cb')?.checked;
+            el.disabled = disabled || !!na;
         });
     }
 
     // ── Tab switching ─────────────────────────────────────────────────────
     function switchTab(tabName) {
+        commitStudentStatus();
         document.querySelectorAll('.tab-panel').forEach(p => p.style.display = 'none');
         document.querySelectorAll('.tab-btn').forEach(b => b.classList.remove('active'));
 
@@ -2190,6 +2401,7 @@ partner: Ulster University
         renderIssuesTab();
         updateIssuesBadge();
         updateStudentOptionLabel(sIdx);
+        saveToLocalStorage();
     };
 
     window._deleteIssueGlobal = function(sIdx, iIdx) {
@@ -2199,6 +2411,7 @@ partner: Ulster University
         renderIssuesTab();
         updateIssuesBadge();
         updateStudentOptionLabel(sIdx);
+        saveToLocalStorage();
     };
 
     // ── Issue edit modal ──────────────────────────────────────────────────
@@ -2224,6 +2437,7 @@ partner: Ulster University
         closeIssueEdit();
         renderStudentIssuesSection();
         updateIssuesBadge();
+        saveToLocalStorage();
     }
 
     function closeIssueEdit() {
@@ -2286,23 +2500,22 @@ partner: Ulster University
         if (!tbody) return;
 
         if (!state.studentData.length) {
-            tbody.innerHTML = '<tr><td colspan="6" class="table-empty">No students loaded — upload a list in Setup.</td></tr>';
+            tbody.innerHTML = '<tr><td colspan="8" class="table-empty">No students loaded — upload a list in Setup.</td></tr>';
             return;
         }
 
-        const maxScore = state.currentRubric
-            ? state.currentRubric.criteria.reduce((s, c) => s + c.maxScore, 0)
-            : 0;
+        const maxScore = currentMaxScore();
+        const pass = getPassMark();
 
         tbody.innerHTML = state.studentData.map((student, index) => {
-            const pct = maxScore > 0
-                ? ((student.score / maxScore) * 100).toFixed(1)
-                : (student.score > 0 ? '—' : '0.0');
+            const summary = AcademicRules.markSummary(student, maxScore, pass);
+            const academicPct = summary.rawPct.toFixed(1);
+            const recordedPct = summary.recordedPct.toFixed(1);
 
             let rowClass, badgeClass, badgeText;
             if (student.nonSubmission) {
                 rowClass = 'row-ns'; badgeClass = 'badge-ns'; badgeText = 'Non-Submission';
-            } else if (student.score > 0) {
+            } else if (isStudentFullyAssessed(student)) {
                 rowClass = 'row-marked'; badgeClass = 'badge-marked'; badgeText = 'Marked';
             } else {
                 rowClass = 'row-unmarked'; badgeClass = 'badge-unmarked'; badgeText = 'Not marked';
@@ -2313,19 +2526,21 @@ partner: Ulster University
                 ? `<span class="issues-cell-count has-issues">🚩 ${openIssues}</span>`
                 : `<span class="issues-cell-count">—</span>`;
 
-            const pctNum = parseFloat(pct);
-            const zoneInfo = (!student.nonSubmission && student.score > 0 && !isNaN(pctNum))
-                ? classifyMark(pctNum) : null;
+            const zoneInfo = (!student.nonSubmission && isStudentFullyAssessed(student))
+                ? summary.rawZone : null;
             const zonePill = zoneInfo
                 ? `<span class="boundary-badge-pill zone-${zoneInfo.zone}" style="margin-left:4px;font-size:8px;">${zoneInfo.label}</span>`
                 : '';
+            const capFlag = summary.capApplied
+                ? `<span class="cap-flag">capped</span>` : '';
 
             return `<tr class="${rowClass}" data-index="${index}">
                 <td>${index + 1}</td>
                 <td>${student.id}</td>
                 <td>${student.name}</td>
                 <td>${student.nonSubmission ? '—' : student.score.toFixed(1)}</td>
-                <td>${student.nonSubmission ? '—' : pct + '%'}${zonePill}</td>
+                <td>${student.nonSubmission ? '—' : academicPct + '%'}${zonePill}</td>
+                <td class="recorded-pct-cell">${student.nonSubmission ? '—' : recordedPct + '%'}${capFlag}</td>
                 <td><span class="status-badge ${badgeClass}">${badgeText}</span></td>
                 <td>${issuesCell}</td>
             </tr>`;
@@ -2335,7 +2550,10 @@ partner: Ulster University
             const idx = parseInt(row.dataset.index);
             // Left-click → open in Mark tab
             row.addEventListener('click', () => {
-                if (state.currentStudentIndex >= 0) saveStudentFeedback();
+                if (state.currentStudentIndex >= 0 && state.currentStudentIndex !== idx) {
+                    commitStudentStatus();
+                    saveStudentFeedback();
+                }
                 state.currentStudentIndex = idx;
                 elements.studentSelect.value = idx;
                 loadStudentFeedback();
@@ -2348,13 +2566,13 @@ partner: Ulster University
 
     // ── Analytics tab ─────────────────────────────────────────────────────
     function renderAnalyticsTab() {
-        const maxScore = state.currentRubric
-            ? state.currentRubric.criteria.reduce((s, c) => s + c.maxScore, 0)
-            : 0;
+        const maxScore = currentMaxScore();
+        const pass   = getPassMark();
 
-        const marked = state.studentData.filter(s => s.score > 0 && !s.nonSubmission);
+        const marked = state.studentData.filter(s => isStudentFullyAssessed(s));
         const ns     = state.studentData.filter(s => s.nonSubmission);
-        const pcts   = marked.map(s => maxScore > 0 ? (s.score / maxScore) * 100 : 0);
+        const pcts   = marked.map(s => AcademicRules.getRawPercent(s, maxScore));
+        const recordedPcts = marked.map(s => AcademicRules.getRecordedPercent(s, maxScore, pass));
 
         const set = (id, val) => { const el = document.getElementById(id); if (el) el.textContent = val; };
 
@@ -2370,8 +2588,7 @@ partner: Ulster University
             const mid    = Math.floor(sorted.length / 2);
             const median = sorted.length % 2 ? sorted[mid] : (sorted[mid - 1] + sorted[mid]) / 2;
             const sd     = Math.sqrt(pcts.reduce((s, v) => s + (v - mean) ** 2, 0) / pcts.length);
-            const pass   = getPassMark();
-            const passN  = pcts.filter(p => p >= pass).length;
+            const passN  = recordedPcts.filter(p => p >= pass).length;
 
             set('statMean',   mean.toFixed(1) + '%');
             set('statMedian', median.toFixed(1) + '%');
@@ -2386,13 +2603,12 @@ partner: Ulster University
         }
 
         // Grade distribution chart — bands adjust to pass mark
-        const pass = getPassMark();
         const cleanBands = [
             { label: `Distinction (70–100%)`,               cls: 'bar-distinction',  min: 70,     max: 101   },
             { label: `Merit (60–69%)`,                       cls: 'bar-commendation', min: 60,     max: 70    },
             { label: `Pass (${pass}–59%)`,                   cls: 'bar-merit',        min: pass,   max: 60    },
-            { label: `Condoned Fail (${pass-5}–${pass-0.1}%)`, cls: 'bar-borderline',min: pass-5, max: pass  },
-            { label: `Fail (0–${(pass-5-0.01).toFixed(0)}%)`, cls: 'bar-fail',       min: 0,      max: pass-5},
+            { label: `Potential condonable-fail (${pass-5}–${pass-0.1}%)`, cls: 'bar-borderline',min: pass-5, max: pass  },
+            { label: `Clear fail (0–${(pass-5-0.01).toFixed(0)}%)`, cls: 'bar-fail',       min: 0,      max: pass-5},
             { label: 'Non-Submission',                       cls: 'bar-ns',           min: -1,     max: -1    },
         ];
 
@@ -2453,9 +2669,9 @@ partner: Ulster University
             { label: 'Merit',                 zone: 'merit',                  min: 60,        max: 68.5},
             { label: 'Near Merit ▲',          zone: 'borderline-merit',       min: 58.5,      max: 60  },
             { label: 'Pass',                  zone: 'pass',                   min: pass,      max: 58.5},
-            { label: 'Borderline Pass ⚠',    zone: 'borderline-pass',        min: pass-1.5,  max: pass},
-            { label: 'Condoned Fail Zone ⚠', zone: 'condoned-fail',          min: pass-5,    max: pass-1.5},
-            { label: 'Fail',                  zone: 'fail',                   min: 0,         max: pass-5},
+            { label: 'Borderline mark ⚠',    zone: 'borderline-pass',        min: pass-1.5,  max: pass},
+            { label: 'Potential condonable-fail range ⚠', zone: 'condoned-fail', min: pass-5, max: pass-1.5},
+            { label: 'Clear fail',                  zone: 'fail',                   min: 0,         max: pass-5},
         ];
 
         el.innerHTML = `<table class="boundary-table">
@@ -2503,9 +2719,9 @@ partner: Ulster University
         }
 
         // 4. Many borderline fails (condoned zone)
-        const condonedN = pcts.filter(p => p >= pass - 5 && p < pass - 1.5).length;
+        const condonedN = pcts.filter(p => p >= pass - 5 && p < pass).length;
         if (condonedN >= 3)
-            warnings.push({ level:'warning', text: `${condonedN} students fall within the condoned fail zone (${(pass-5).toFixed(0)}–${(pass-1.5).toFixed(0)}%). Board attention required.` });
+            warnings.push({ level:'warning', text: `${condonedN} students fall within the potential condonable-fail range (${(pass-5).toFixed(0)}–${pass}%). Check applicable programme regulations — this is not an automatic condonement.` });
 
         // 5. High fail rate
         const failN = pcts.filter(p => p < pass).length;
@@ -2520,7 +2736,11 @@ partner: Ulster University
         // 7. Borderline pass cluster
         const bpN = pcts.filter(p => p >= pass - 1.5 && p < pass).length;
         if (bpN >= 3)
-            warnings.push({ level:'info', text: `${bpN} students are borderline pass (within 1.5 marks of threshold). Individual review recommended before board.` });
+            warnings.push({ level:'info', text: `${bpN} students have a borderline mark (within 1.5 of the pass threshold). Review assessment evidence and rubric application — do not raise marks solely because of the boundary.` });
+
+        const cappedN = marked.filter(s => AcademicRules.isCappedResit(s)).length;
+        if (cappedN)
+            warnings.push({ level:'info', text: `${cappedN} capped resit/repeat student(s): academic marks are retained; recorded marks are capped at ${pass}%.` });
 
         if (!warnings.length) {
             el.innerHTML = '<div class="mod-warning mod-ok">✅ No significant moderation concerns detected.</div>';
@@ -2689,6 +2909,7 @@ partner: Ulster University
         task.description = document.getElementById('tdDescription')?.value.trim() || '';
         closeTaskDetail();
         renderModuleTasksSection();
+        saveToLocalStorage();
     }
 
     function deleteTaskFromDetail() {
@@ -2698,6 +2919,7 @@ partner: Ulster University
         state.moduleTasks.splice(idx, 1);
         closeTaskDetail();
         renderModuleTasksSection();
+        saveToLocalStorage();
     }
 
     function addNoteToTask() {
@@ -2711,6 +2933,7 @@ partner: Ulster University
         task.notes.push({ text, ts: new Date().toLocaleString() });
         noteEl.value = '';
         renderTaskNotes(task);
+        saveToLocalStorage();
     }
 
     function renderTaskNotes(task) {
@@ -2807,6 +3030,7 @@ partner: Ulster University
         updateIssuesBadge();
         updateStudentOptionLabel(idx);
         if (document.getElementById('tab-issues')?.style.display !== 'none') renderIssuesTab();
+        saveToLocalStorage();
     }
 
     // Exposed globally so inline onclick in rendered HTML can call them
@@ -2818,6 +3042,7 @@ partner: Ulster University
         renderIssuesList(student);
         updateIssuesBadge();
         updateStudentOptionLabel(idx);
+        saveToLocalStorage();
     };
 
     window._deleteIssue = function(issueIndex) {
@@ -2828,6 +3053,7 @@ partner: Ulster University
         renderIssuesList(student);
         updateIssuesBadge();
         updateStudentOptionLabel(idx);
+        saveToLocalStorage();
     };
 
     // ── Context menu (right-click on student rows) ────────────────────────
@@ -2878,7 +3104,7 @@ partner: Ulster University
             loadStudentFeedback();
             if (elements.statusSelect) {
                 elements.statusSelect.value = elements.statusSelect.value === 'ns' ? 'registered' : 'ns';
-                handleStatusChange();
+                commitStudentStatus();
             }
             switchTab('mark');
         });
@@ -3024,6 +3250,7 @@ partner: Ulster University
         state.moduleTasks.splice(idx, 1);
         _selectedTaskIdx = -1;
         renderModuleTasksSection();
+        saveToLocalStorage();
     }
 
     function addNoteInline() {
@@ -3061,11 +3288,15 @@ partner: Ulster University
     }
 
     window._setTaskStatus = function(i, status) {
-        if (state.moduleTasks[i]) { state.moduleTasks[i].status = status; renderModuleTasksSection(); }
+        if (state.moduleTasks[i]) { state.moduleTasks[i].status = status; }
+        renderModuleTasksSection();
+        saveToLocalStorage();
     };
+
     window._deleteTask = function(i) {
         state.moduleTasks.splice(i, 1);
         renderModuleTasksSection();
+        saveToLocalStorage();
     };
 
     // ── localStorage session persistence ─────────────────────────────────
@@ -3103,25 +3334,31 @@ partner: Ulster University
                 banner.style.display = 'flex';
 
                 document.getElementById('sessionRestoreBtn')?.addEventListener('click', () => {
-                    state.studentData = snap.studentData;
-                    state.moduleTasks = snap.moduleTasks || [];
-                    state.deadlines   = snap.deadlines   || state.deadlines;
-                    if (snap.settings) {
-                        state.settings = snap.settings;
+                    let use = snap;
+                    try {
+                        const latest = JSON.parse(localStorage.getItem(LS_KEY) || 'null');
+                        if (latest && Array.isArray(latest.studentData) && latest.studentData.length) use = latest;
+                    } catch (_) {}
+                    state.studentData = use.studentData;
+                    state.moduleTasks = use.moduleTasks || [];
+                    state.deadlines   = use.deadlines   || state.deadlines;
+                    if (use.settings) {
+                        state.settings = use.settings;
                         const lvlSel = document.getElementById('programmeLevelSelect');
-                        if (lvlSel) lvlSel.value = snap.settings.programmeLevel || 'msc';
+                        if (lvlSel) lvlSel.value = use.settings.programmeLevel || 'msc';
                         const cpEl = document.getElementById('customPassMark');
-                        if (cpEl) cpEl.value = snap.settings.customPassMark || 50;
+                        if (cpEl) cpEl.value = use.settings.customPassMark || 50;
                         const customRow = document.getElementById('customPassMarkRow');
-                        if (customRow) customRow.style.display = snap.settings.programmeLevel === 'custom' ? 'flex' : 'none';
+                        if (customRow) customRow.style.display = use.settings.programmeLevel === 'custom' ? 'flex' : 'none';
                     }
                     populateStudentSelect();
                     populateQuickIssueSelect();
                     updateProgressIndicator();
+                    restoreDeadlines();
                     banner.style.display = 'none';
                     const chip = elements.studentStatusChip;
-                    if (chip) { chip.textContent = `${state.studentData.length} students`; chip.className = 'status-chip chip-students'; }
-                    alert(`Session restored: ${snap.studentData.length} students loaded.`);
+                    if (chip) { chip.textContent = `${use.studentData.length} students`; chip.className = 'status-chip chip-students'; }
+                    alert(`Session restored: ${use.studentData.length} students loaded.`);
                 });
                 document.getElementById('sessionDismissBtn')?.addEventListener('click', () => {
                     banner.style.display = 'none';
@@ -3208,8 +3445,12 @@ partner: Ulster University
         if (!badge || !state.currentRubric) { if (badge) badge.style.display = 'none'; return; }
 
         const total  = state.currentRubric.criteria.length;
-        const scored = [...document.querySelectorAll('.score-input')]
-            .filter(inp => parseFloat(inp.value) > 0).length;
+        let scored = 0;
+        document.querySelectorAll('.criteria-card').forEach(card => {
+            const na = card.querySelector('.not-attempted-cb')?.checked;
+            const v = parseScoreInput(card.querySelector('.score-input'));
+            if (na || v !== null) scored += 1;
+        });
 
         badge.textContent  = `${scored}/${total} scored`;
         badge.className    = `scoring-progress-badge ${scored === total ? 'all-scored' : scored > 0 ? 'partial-scored' : 'none-scored'}`;
@@ -3228,10 +3469,15 @@ partner: Ulster University
         const zone     = !student.nonSubmission && student.score > 0 ? classifyMark(parseFloat(pct)) : null;
 
         const criteriaRows = rubric ? rubric.criteria.map((c, i) => {
-            const sc = student.rubricData?.scores?.[i] ?? 0;
+            const cell = criterionExportCell(student, i, c);
             const cc = student.rubricData?.criteriaComments?.[i] || '';
-            const pctLabel = criterionPercentLabel(sc, c.maxScore);
-            return `<tr><td><b>${c.title}</b>${cc ? `<br><span class="cc">${cc}</span>` : ''}</td><td style="text-align:right;font-weight:700;">${sc}/${c.maxScore}${pctLabel ? ` (${pctLabel})` : ''}</td></tr>`;
+            const pctLabel = (typeof cell.score === 'number') ? criterionPercentLabel(cell.score, c.maxScore) : '';
+            const scoreLabel = cell.attempt === 'Not Attempted'
+                ? `0/${c.maxScore} (Not Attempted)`
+                : cell.attempt === 'Unmarked'
+                    ? `unmarked/${c.maxScore}`
+                    : `${cell.score}/${c.maxScore}${pctLabel ? ` (${pctLabel})` : ''}`;
+            return `<tr><td><b>${c.title}</b>${cc ? `<br><span class="cc">${cc}</span>` : ''}</td><td style="text-align:right;font-weight:700;">${scoreLabel}</td></tr>`;
         }).join('') : '';
 
         const html = `<!DOCTYPE html><html><head><meta charset="UTF-8">
@@ -3426,7 +3672,20 @@ partner: Ulster University
     async function saveToExcel() {
         try {
             if (!state.studentData.length) throw new Error('No student data to save');
-            if (state.currentStudentIndex >= 0) saveStudentFeedback();
+            if (state.currentStudentIndex >= 0) {
+                commitStudentStatus();
+                saveStudentFeedback();
+                const cur = state.studentData[state.currentStudentIndex];
+                if (cur && !cur.nonSubmission && state.currentRubric) {
+                    const qc = AcademicRules.runQualityChecks({
+                        student: cur,
+                        rubric: state.currentRubric,
+                        pass: getPassMark(),
+                        acknowledgements: effectiveAcknowledgements(cur)
+                    });
+                    if (qc.warningCount + qc.reviewCount > 0) renderQualityCheckPanel(qc);
+                }
+            }
 
             const maxScore = state.currentRubric
                 ? state.currentRubric.criteria.reduce((s, c) => s + c.maxScore, 0) : 0;
@@ -3434,24 +3693,25 @@ partner: Ulster University
 
             // ── Sheet 1: Marks ─────────────────────────────────────────────
             const marksRows = state.studentData.map((student, i) => {
-                const pctNum = maxScore > 0 ? (student.score / maxScore) * 100 : 0;
-                const pct    = student.nonSubmission ? 'NS' : pctNum.toFixed(1) + '%';
-                const zone   = !student.nonSubmission && student.score > 0 ? classifyMark(pctNum).label : '—';
+                const summary = AcademicRules.markSummary(student, maxScore, pass);
+                const zone   = !student.nonSubmission && isStudentFullyAssessed(student) ? summary.recordedZone.label : '—';
                 const row = { '#': i + 1, 'Student ID': student.id, 'Name': student.name,
                     'Student Status': student.status || 'registered',
-                    'Marking Status': student.nonSubmission ? 'Non-Submission' : (student.score > 0 ? 'Marked' : 'Not Marked') };
+                    'Marking Status': student.nonSubmission ? 'Non-Submission' : (isStudentFullyAssessed(student) ? 'Marked' : 'Not Marked') };
                 if (state.currentRubric) {
                     state.currentRubric.criteria.forEach((crit, idx) => {
-                        const score = student.rubricData?.scores?.[idx] ?? 0;
-                        row[`${crit.title} (/${crit.maxScore})`] = student.nonSubmission ? 'NS' : score;
-                        row[`${crit.title} (%)`] = student.nonSubmission
-                            ? 'NS'
-                            : (crit.maxScore > 0 ? formatPercent(score, crit.maxScore) : '');
+                        const cell = criterionExportCell(student, idx, crit);
+                        row[`${crit.title} (/${crit.maxScore})`] = cell.score;
+                        row[`${crit.title} (%)`] = cell.pct;
+                        row[`${crit.title} (Attempt)`] = cell.attempt;
                     });
                 }
                 row['Total Score']      = student.nonSubmission ? 'NS' : (student.score || 0);
                 row['Max Score']        = maxScore;
-                row['Percentage']       = pct;
+                row['Academic %']       = student.nonSubmission ? 'NS' : summary.rawPct.toFixed(1) + '%';
+                row['Recorded %']       = student.nonSubmission ? 'NS' : summary.recordedPct.toFixed(1) + '%';
+                row['Percentage']       = student.nonSubmission ? 'NS' : summary.recordedPct.toFixed(1) + '%';
+                row['Capped']           = AcademicRules.isCappedResit(student) ? 'Yes' : 'No';
                 row['Grade Zone']       = zone;
                 row['Overall Comments'] = student.rubricData?.overallComments || '';
                 const openIssues = (student.issues || []).filter(i => !i.resolved);
@@ -3461,45 +3721,51 @@ partner: Ulster University
 
             // ── Sheet 1b: Marks % (out of 100 only) ────────────────────────
             const pctOnlyRows = state.studentData.map((student, i) => {
-                const pctNum = maxScore > 0 ? (student.score / maxScore) * 100 : 0;
+                const summary = AcademicRules.markSummary(student, maxScore, pass);
                 const row = { '#': i + 1, 'Student ID': student.id, 'Name': student.name };
                 if (state.currentRubric) {
                     state.currentRubric.criteria.forEach((crit, idx) => {
-                        const score = student.rubricData?.scores?.[idx] ?? 0;
-                        row[`${crit.title} (/100)`] = student.nonSubmission
-                            ? 'NS'
-                            : (crit.maxScore > 0 ? parseFloat(toPercent(score, crit.maxScore).toFixed(1)) : '');
+                        const cell = criterionExportCell(student, idx, crit);
+                        row[`${crit.title} (/100)`] = cell.pct100;
+                        row[`${crit.title} (Attempt)`] = cell.attempt;
                     });
                 }
-                row['Total (/100)'] = student.nonSubmission ? 'NS' : parseFloat(pctNum.toFixed(1));
+                row['Total Academic (/100)'] = student.nonSubmission ? 'NS' : summary.rawPct;
+                row['Total Recorded (/100)'] = student.nonSubmission ? 'NS' : summary.recordedPct;
+                row['Capped'] = AcademicRules.isCappedResit(student) ? 'Yes' : 'No';
                 return row;
             });
 
             // ── Sheet 2: Summary statistics ────────────────────────────────
-            const marked = state.studentData.filter(s => s.score > 0 && !s.nonSubmission);
-            const pcts   = marked.map(s => maxScore > 0 ? (s.score / maxScore) * 100 : 0);
+            const marked = state.studentData.filter(s => isStudentFullyAssessed(s));
+            const pcts   = marked.map(s => AcademicRules.getRawPercent(s, maxScore));
+            const recPcts = marked.map(s => AcademicRules.getRecordedPercent(s, maxScore, pass));
             const mean   = pcts.length ? pcts.reduce((a, b) => a + b, 0) / pcts.length : 0;
             const sorted = [...pcts].sort((a, b) => a - b);
             const mid    = Math.floor(sorted.length / 2);
             const median = sorted.length % 2 ? sorted[mid] : ((sorted[mid-1] + sorted[mid]) / 2);
             const sd     = pcts.length ? Math.sqrt(pcts.reduce((s, v) => s + (v - mean) ** 2, 0) / pcts.length) : 0;
+            const passN  = recPcts.filter(p => p >= pass).length;
+            const failN  = recPcts.filter(p => p < pass).length;
             const summaryRows = [
                 { 'Metric': 'Module',         'Value': state.currentRubric?.metadata?.module_code || '—' },
                 { 'Metric': 'Module Title',   'Value': state.currentRubric?.metadata?.module_title || '—' },
                 { 'Metric': 'Assessment',     'Value': state.currentRubric?.metadata?.course_work || '—' },
                 { 'Metric': 'Semester',       'Value': state.currentRubric?.metadata?.semester || '—' },
                 { 'Metric': 'Marker',         'Value': document.getElementById('markerName')?.value.trim() || '—' },
+                { 'Metric': 'Programme / Pass', 'Value': (state.settings.programmeLevel || 'msc').toUpperCase() + ' / ' + pass + '%' },
                 { 'Metric': 'Total Students', 'Value': state.studentData.length },
                 { 'Metric': 'Marked',         'Value': marked.length },
                 { 'Metric': 'Non-Submissions','Value': state.studentData.filter(s => s.nonSubmission).length },
+                { 'Metric': 'Capped Resits',  'Value': state.studentData.filter(s => AcademicRules.isCappedResit(s)).length },
                 { 'Metric': 'Pass Threshold', 'Value': pass + '%' },
-                { 'Metric': 'Mean %',         'Value': mean.toFixed(1) + '%' },
-                { 'Metric': 'Median %',       'Value': median.toFixed(1) + '%' },
-                { 'Metric': 'Std Dev',        'Value': sd.toFixed(1) },
-                { 'Metric': 'Min %',          'Value': sorted.length ? sorted[0].toFixed(1) + '%' : '—' },
-                { 'Metric': 'Max %',          'Value': sorted.length ? sorted[sorted.length-1].toFixed(1) + '%' : '—' },
-                { 'Metric': 'Pass Rate',      'Value': pcts.length ? (pcts.filter(p => p >= pass).length + '/' + pcts.length + ' (' + ((pcts.filter(p => p >= pass).length / pcts.length)*100).toFixed(0) + '%)') : '—' },
-                { 'Metric': 'Failure Rate',   'Value': pcts.length ? (pcts.filter(p => p < pass).length + '/' + pcts.length + ' (' + ((pcts.filter(p => p < pass).length / pcts.length)*100).toFixed(0) + '%)') : '—' },
+                { 'Metric': 'Mean % (academic)', 'Value': mean.toFixed(1) + '%' },
+                { 'Metric': 'Median % (academic)', 'Value': median.toFixed(1) + '%' },
+                { 'Metric': 'Std Dev (academic)', 'Value': sd.toFixed(1) },
+                { 'Metric': 'Min % (academic)', 'Value': sorted.length ? sorted[0].toFixed(1) + '%' : '—' },
+                { 'Metric': 'Max % (academic)', 'Value': sorted.length ? sorted[sorted.length-1].toFixed(1) + '%' : '—' },
+                { 'Metric': 'Pass Rate (recorded)', 'Value': recPcts.length ? (passN + '/' + recPcts.length + ' (' + ((passN / recPcts.length)*100).toFixed(0) + '%)') : '—' },
+                { 'Metric': 'Failure Rate (recorded)', 'Value': recPcts.length ? (failN + '/' + recPcts.length + ' (' + ((failN / recPcts.length)*100).toFixed(0) + '%)') : '—' },
                 { 'Metric': 'Students with Open Issues', 'Value': state.studentData.filter(s => (s.issues||[]).some(i => !i.resolved)).length },
                 { 'Metric': '— Deadlines —',  'Value': '' },
                 { 'Metric': 'Submission Deadline',  'Value': state.deadlines.submission  || '—' },
@@ -3513,11 +3779,14 @@ partner: Ulster University
             const boundaryRows = state.studentData
                 .filter(s => !s.nonSubmission && s.score > 0)
                 .map(s => {
-                    const pctNum = maxScore > 0 ? (s.score / maxScore) * 100 : 0;
-                    const z = classifyMark(pctNum);
+                    const summary = AcademicRules.markSummary(s, maxScore, pass);
+                    const z = summary.rawZone;
                     return { 'Student ID': s.id, 'Name': s.name, 'Score': s.score,
-                        'Max Score': maxScore, 'Percentage': pctNum.toFixed(1) + '%',
-                        'Grade Zone': z.label, 'Attention Required': z.guidance ? 'YES' : '',
+                        'Max Score': maxScore,
+                        'Academic %': summary.rawPct.toFixed(1) + '%',
+                        'Recorded %': summary.recordedPct.toFixed(1) + '%',
+                        'Capped': AcademicRules.isCappedResit(s) ? 'Yes' : 'No',
+                        'Grade Zone': z.label, 'Attention Required': z.requiresReview ? 'YES' : '',
                         'Guidance': z.guidance || '' };
                 })
                 .filter(r => r['Attention Required'] === 'YES');
@@ -3531,15 +3800,15 @@ partner: Ulster University
 
             // ── Sheet 5: Resit Students ────────────────────────────────────
             const resitRows = state.studentData.filter(s => RESIT_STATUSES.has(s.status)).map(s => {
-                const pctNum = maxScore > 0 ? (s.score / maxScore) * 100 : 0;
-                const effPct = s.resitDetails?.capped ? Math.min(pctNum, pass) : pctNum;
+                const summary = AcademicRules.markSummary(s, maxScore, pass);
                 return { 'Student ID': s.id, 'Name': s.name, 'Status': s.status,
                     'Previous Mark': s.resitDetails?.previousMark || '',
                     'Attempt #': s.resitDetails?.attemptNumber || 2,
-                    'Score': s.score, 'Actual %': pctNum.toFixed(1),
+                    'Score': s.score,
+                    'Academic %': summary.rawPct.toFixed(1),
                     'Capped': s.resitDetails?.capped ? 'Yes' : 'No',
-                    'Effective %': effPct.toFixed(1),
-                    'Effective Zone': classifyMark(effPct).label };
+                    'Recorded %': summary.recordedPct.toFixed(1),
+                    'Recorded Zone': summary.recordedZone.label };
             });
 
             // ── Sheet 6: Moderation Review ────────────────────────────────
@@ -3608,6 +3877,8 @@ partner: Ulster University
                 'Resit Details': JSON.stringify(s.resitDetails || {}),
                 'Rubric Data': JSON.stringify(s.rubricData || {}),
                 'Timeline': JSON.stringify(s.timeline || []),
+                'Quality Acknowledgements': JSON.stringify(s.qualityAcknowledgements || {}),
+                'Committed Status': s.committedStatus || s.status || 'registered',
             }));
 
             // ── Colour-code the Marks sheet by grade zone ─────────────────
@@ -3635,13 +3906,13 @@ partner: Ulster University
             // Style data rows
             state.studentData.forEach((student, i) => {
                 const r = i + 1;
-                const pctNum = maxScore > 0 ? (student.score / maxScore) * 100 : 0;
+                const summary = AcademicRules.markSummary(student, maxScore, pass);
                 let bgRgb = 'FFFFFF';
                 let fgRgb = '000000';
                 if (student.nonSubmission) {
                     bgRgb = 'D9D9D9';
                 } else if (student.score > 0) {
-                    const z = classifyMark(pctNum);
+                    const z = summary.recordedZone;
                     bgRgb = ZONE_BG[z.zone] || 'FFFFFF';
                     if (z.zone === 'fail') fgRgb = 'FFFFFF';
                 }
@@ -3665,13 +3936,13 @@ partner: Ulster University
             }
             state.studentData.forEach((student, i) => {
                 const r = i + 1;
-                const pctNum = maxScore > 0 ? (student.score / maxScore) * 100 : 0;
+                const summary = AcademicRules.markSummary(student, maxScore, pass);
                 let bgRgb = 'FFFFFF';
                 let fgRgb = '000000';
                 if (student.nonSubmission) {
                     bgRgb = 'D9D9D9';
                 } else if (student.score > 0) {
-                    const z = classifyMark(pctNum);
+                    const z = summary.recordedZone;
                     bgRgb = ZONE_BG[z.zone] || 'FFFFFF';
                     if (z.zone === 'fail') fgRgb = 'FFFFFF';
                 }
@@ -3718,6 +3989,175 @@ partner: Ulster University
         } catch (error) {
             console.error('Export error:', error);
             alert(`Export failed: ${error.message}`);
+        }
+    }
+
+    // ── Marking Quality Check (deterministic) ─────────────────────────────
+    function runMarkingQualityCheck() {
+        const panel = document.getElementById('qualityCheckPanel');
+        if (!panel) return;
+        if (state.currentStudentIndex < 0) {
+            panel.style.display = 'block';
+            panel.innerHTML = '<div class="qc-title">MARKING QUALITY CHECK</div><div class="qc-item qc-review">Select a student first.</div>';
+            return;
+        }
+        if (!state.currentRubric) {
+            panel.style.display = 'block';
+            panel.innerHTML = '<div class="qc-title">MARKING QUALITY CHECK</div><div class="qc-item qc-review">Load a rubric first.</div>';
+            return;
+        }
+        commitStudentStatus();
+        saveStudentFeedback();
+        const student = state.studentData[state.currentStudentIndex];
+        const result = AcademicRules.runQualityChecks({
+            student,
+            rubric: state.currentRubric,
+            pass: getPassMark(),
+            acknowledgements: effectiveAcknowledgements(student)
+        });
+        renderQualityCheckPanel(result);
+        document.querySelectorAll('.criteria-card').forEach(c => c.classList.remove('qc-highlight'));
+    }
+
+    function qualityGateAllowsLeave() {
+        if (state.currentStudentIndex < 0 || !state.currentRubric) return true;
+        const student = state.studentData[state.currentStudentIndex];
+        if (!student || student.nonSubmission) return true;
+        const result = AcademicRules.runQualityChecks({
+            student,
+            rubric: state.currentRubric,
+            pass: getPassMark(),
+            acknowledgements: effectiveAcknowledgements(student)
+        });
+        if (result.warningCount > 0) {
+            state._qcReviewSoftGate = null;
+            renderQualityCheckPanel(result, 'Cannot move on yet: resolve structural warnings (unmarked criteria, invalid scores, or total mismatches). Review items are not automatic blockers.');
+            return false;
+        }
+        if (result.reviewCount > 0 && state._qcReviewSoftGate !== state.currentStudentIndex) {
+            state._qcReviewSoftGate = state.currentStudentIndex;
+            renderQualityCheckPanel(result, 'Review items found. The mark has not been changed. Click Next again to continue.');
+            return false;
+        }
+        state._qcReviewSoftGate = null;
+        return true;
+    }
+
+    function renderQualityCheckPanel(result, gateNote) {
+        const panel = document.getElementById('qualityCheckPanel');
+        if (!panel) return;
+        const icon = { PASS: '✓', REVIEW: '⚠', WARNING: '⚠' };
+        const cls  = { PASS: 'qc-pass', REVIEW: 'qc-review', WARNING: 'qc-warning' };
+        const needs = result.warningCount + result.reviewCount;
+        const itemsHtml = result.items.map((item, i) => {
+            const clickable = item.target ? ' qc-clickable' : '';
+            return `<div class="qc-item ${cls[item.severity]}${clickable}" data-qc-idx="${i}">${icon[item.severity]} ${item.message}</div>`;
+        }).join('');
+        panel.style.display = 'block';
+        panel.innerHTML = `<div class="qc-title">MARKING QUALITY CHECK — ${result.summary}</div>${itemsHtml}
+            ${gateNote ? `<div class="qc-summary qc-gate">${gateNote}</div>` : ''}
+            <div class="qc-summary">${needs} item${needs === 1 ? '' : 's'} require review before finalisation.</div>`;
+        panel.querySelectorAll('.qc-clickable').forEach(el => {
+            el.addEventListener('click', () => {
+                const idx = parseInt(el.dataset.qcIdx, 10);
+                focusQualityTarget(result.items[idx]?.target);
+            });
+        });
+    }
+
+    function focusQualityTarget(target) {
+        if (!target) return;
+        switchTab('mark');
+        document.querySelectorAll('.criteria-card').forEach(c => c.classList.remove('qc-highlight'));
+        if (target.startsWith('criterion:')) {
+            const card = document.querySelector(`.criteria-card[data-index="${target.split(':')[1]}"]`);
+            if (card) {
+                card.classList.add('qc-highlight');
+                card.scrollIntoView({ behavior: 'smooth', block: 'center' });
+                card.querySelector('.score-input')?.focus();
+            }
+        } else if (target === 'overall') {
+            elements.overallComments?.focus();
+            elements.overallComments?.scrollIntoView({ behavior: 'smooth', block: 'center' });
+        } else if (target === 'issues') {
+            openIssuesModal();
+        } else if (target === 'resit') {
+            const el = document.getElementById('resitCapped');
+            el?.scrollIntoView({ behavior: 'smooth', block: 'center' });
+            el?.focus();
+        } else if (target === 'boundary') {
+            document.getElementById('boundaryRow')?.scrollIntoView({ behavior: 'smooth', block: 'center' });
+        } else if (target === 'score') {
+            document.getElementById('totalScore')?.scrollIntoView({ behavior: 'smooth', block: 'center' });
+        }
+    }
+
+    function acknowledgeBoundaryReview() {
+        if (state.currentStudentIndex < 0) return;
+        saveStudentFeedback();
+        const student = state.studentData[state.currentStudentIndex];
+        if (!student) return;
+        const summary = studentMarkSummary(student);
+        if (!summary.rawZone.requiresReview) return;
+        student.qualityAcknowledgements = {
+            borderlineReviewed: true,
+            acknowledgedAt: new Date().toISOString(),
+            acknowledgedPct: summary.rawPct,
+            acknowledgedZone: summary.rawZone.zone
+        };
+        logTimeline(student, 'note', `Boundary review acknowledged (${summary.rawPct}% · ${summary.rawZone.label}). Mark not changed.`);
+        saveToLocalStorage();
+        updateBoundaryDisplay(summary.rawPct);
+        renderStudentTimeline(student);
+        const panel = document.getElementById('qualityCheckPanel');
+        if (panel && panel.style.display !== 'none') runMarkingQualityCheck();
+    }
+
+    // ── Copy for AI Review (de-identified, no API) ────────────────────────
+    function openAiReviewModal() {
+        if (state.currentStudentIndex < 0) { alert('Select a student first.'); return; }
+        if (!state.currentRubric) { alert('Load a rubric first.'); return; }
+        saveStudentFeedback();
+        const student = state.studentData[state.currentStudentIndex];
+        const built = AcademicRules.buildAiReviewPrompt({
+            student,
+            rubric: state.currentRubric,
+            pass: getPassMark()
+        });
+        const ta = document.getElementById('aiReviewPrompt');
+        if (ta) ta.value = built.prompt;
+        const copied = document.getElementById('aiReviewCopied');
+        if (copied) copied.style.display = 'none';
+        const modal = document.getElementById('aiReviewModal');
+        if (modal) modal.style.display = 'flex';
+    }
+
+    function closeAiReviewModal() {
+        const modal = document.getElementById('aiReviewModal');
+        if (modal) modal.style.display = 'none';
+    }
+
+    function copyAiReviewPrompt() {
+        const ta = document.getElementById('aiReviewPrompt');
+        const text = ta?.value || '';
+        if (!text) return;
+        const done = () => {
+            const copied = document.getElementById('aiReviewCopied');
+            if (copied) {
+                copied.textContent = 'Copied to clipboard. Check institutional AI/data policy before submitting.';
+                copied.style.display = 'block';
+            }
+        };
+        if (navigator.clipboard?.writeText) {
+            navigator.clipboard.writeText(text).then(done).catch(() => {
+                ta.select();
+                document.execCommand('copy');
+                done();
+            });
+        } else {
+            ta.select();
+            document.execCommand('copy');
+            done();
         }
     }
 

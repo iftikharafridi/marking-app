@@ -369,11 +369,13 @@ partner: Ulster University
           <span class="footer-score-value">
             <span id="totalScore">0</span>/<span id="maxScore">100</span>
           </span>
-          <span class="footer-pct"><span id="percentage">0</span>%</span>
+          <span class="footer-pct" title="Academic mark before any resit cap"><span id="percentage">0</span>%</span>
           <span id="resitCapNote" class="resit-cap-note" style="display:none;"></span>
           <span id="scoringProgressBadge" class="scoring-progress-badge" style="display:none;"></span>
           <button id="feedbackToggle" class="btn-feedback-toggle">▼ View Feedback</button>
           <div class="footer-export-btns">
+            <button id="qualityCheckBtn" class="btn-dark" title="Run deterministic marking quality checks">✓ Quality Check</button>
+            <button id="aiReviewBtn" class="btn-purple" title="Copy a de-identified prompt for optional AI feedback review">Copy for AI Review</button>
             <button id="copyBtn"   class="btn-blue"   title="Copy plain feedback text to clipboard">📋 Copy text</button>
             <button id="copyBbBtn" class="btn-yellow" title="Copy formatted feedback for Blackboard LMS">🎓 Blackboard</button>
             <button id="docxBtn"   class="btn-purple" title="Download feedback as a Word (.docx) document">📄 Word doc</button>
@@ -383,7 +385,9 @@ partner: Ulster University
         <div id="boundaryRow" class="boundary-row" style="display:none;">
           <span id="boundaryBadge" class="boundary-badge-pill"></span>
           <span id="guidanceMsg"   class="boundary-guidance"></span>
+          <button id="ackBoundaryBtn" class="btn-ack-boundary" style="display:none;" title="Record that this boundary case has been reviewed">Acknowledge review</button>
         </div>
+        <div id="qualityCheckPanel" class="quality-check-panel" style="display:none;"></div>
         <div id="feedbackTextPanel" style="display:none;" class="px-3 pb-2">
           <textarea id="finalOutput" readonly
             class="w-full border border-gray-300 rounded p-2 text-[10px] font-mono resize-y"
@@ -416,13 +420,14 @@ partner: Ulster University
                 <th>Student ID</th>
                 <th>Name</th>
                 <th>Score</th>
-                <th>%</th>
+                <th>Academic %</th>
+                <th>Recorded %</th>
                 <th>Status</th>
                 <th>Issues</th>
               </tr>
             </thead>
             <tbody id="studentsTableBody">
-              <tr><td colspan="7" class="table-empty">No students loaded — upload a list in Setup.</td></tr>
+              <tr><td colspan="8" class="table-empty">No students loaded — upload a list in Setup.</td></tr>
             </tbody>
           </table>
         </div>
@@ -484,6 +489,7 @@ partner: Ulster University
           <!-- RIGHT: Stats + Normal Curve -->
           <div class="analytics-right">
             <div class="analytics-col-header">📈 Cohort Statistics</div>
+            <p id="analyticsMarkNote" class="analytics-mark-note">Mean, median, SD and the distribution use the academic (raw) mark. Pass rate uses the recorded mark after any resit cap. The software never changes a mark because of a boundary flag.</p>
             <div id="statsGrid" class="stats-grid">
               <div class="stat-card"><div class="stat-val" id="statTotal">—</div><div class="stat-lbl">Total Students</div></div>
               <div class="stat-card"><div class="stat-val" id="statMarked">—</div><div class="stat-lbl">Marked</div></div>
@@ -836,6 +842,27 @@ partner: Ulster University
 </div>
 
 
+<!-- AI Review prompt modal -->
+<div id="aiReviewModal" class="modal-overlay" style="display:none;">
+  <div class="modal-box" style="max-width:640px;">
+    <div class="modal-header">
+      <span>Copy for AI Review</span>
+      <button id="aiReviewClose" class="modal-close">✕</button>
+    </div>
+    <div class="modal-body">
+      <p class="ai-privacy-reminder">Privacy: this prompt is de-identified (no student name, ID, email, EC, disability, issues or personal notes). Check your institution’s AI / data policy before pasting assessment information into any external system. Generative AI may assist with feedback wording; it must not decide the mark.</p>
+      <label class="form-label">De-identified prompt</label>
+      <textarea id="aiReviewPrompt" class="ai-review-textarea" readonly></textarea>
+      <p id="aiReviewCopied" class="ai-review-copied" style="display:none;">Copied to clipboard.</p>
+    </div>
+    <div class="modal-footer-bar">
+      <button id="aiReviewCopyBtn" class="btn-action">Copy Prompt</button>
+      <button id="aiReviewCancel" class="btn-nav">Close</button>
+    </div>
+  </div>
+</div>
+
+
 <!-- Hidden Blackboard copy target -->
 <div id="bbHiddenCopy" contenteditable="true"
   style="position:absolute;left:-9999px;white-space:pre-wrap;"></div>
@@ -849,6 +876,7 @@ partner: Ulster University
 
 <script src="https://cdn.jsdelivr.net/npm/docx@7.8.2/build/index.js"></script>
 <script src="./assets/docx-library.js"></script>
+<script src="./js/academic-rules.js"></script>
 <script src="./js/script.js"></script>
 <script src="./js/rubric-loader.js"></script>
 </body>

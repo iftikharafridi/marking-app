@@ -1,0 +1,1305 @@
+{
+  "demo": true,
+  "demoTag": "FICTIONAL-SIG-DEMO",
+  "studentData": [
+    {
+      "demo": true,
+      "demoTag": "FICTIONAL-SIG-DEMO",
+      "id": "DEMO001",
+      "name": "Morgan Ellison",
+      "score": 74,
+      "status": "registered",
+      "committedStatus": "registered",
+      "nonSubmission": false,
+      "feedback": "",
+      "issues": [],
+      "ecDetails": {},
+      "resitDetails": {},
+      "timeline": [],
+      "qualityAcknowledgements": {},
+      "rubricData": {
+        "scores": [
+          12,
+          19,
+          15,
+          4,
+          4,
+          8,
+          12
+        ],
+        "notAttempted": [
+          false,
+          false,
+          false,
+          false,
+          false,
+          false,
+          false
+        ],
+        "selectedFeedback": [
+          {
+            "critIndex": 0,
+            "subIndex": 0,
+            "pointIndex": 0
+          },
+          {
+            "critIndex": 1,
+            "subIndex": 0,
+            "pointIndex": 0
+          },
+          {
+            "critIndex": 2,
+            "subIndex": 0,
+            "pointIndex": 0
+          },
+          {
+            "critIndex": 3,
+            "subIndex": 0,
+            "pointIndex": 0
+          },
+          {
+            "critIndex": 4,
+            "subIndex": 0,
+            "pointIndex": 0
+          },
+          {
+            "critIndex": 5,
+            "subIndex": 0,
+            "pointIndex": 0
+          },
+          {
+            "critIndex": 6,
+            "subIndex": 1,
+            "pointIndex": 0
+          }
+        ],
+        "criteriaComments": {
+          "0": "The problem framing is thorough and the NHS delayed-discharge context is evidenced with recent sources. Dataset choice (HES + local operational extracts) is justified with a clear account of grain, coverage and known quality issues.",
+          "1": "Spark + Delta Lake is a well-argued fit for volume and replayability. Alternative stores are considered and excluded for stated reasons. Architecture and control-flow diagrams are complete enough to reimplement the pipeline.",
+          "2": "Analysis on the combined extracts is substantial: wait-time distributions, site-level comparison and a choropleth of delayed days. Insights are linked back to the original operational question rather than presented as charts alone.",
+          "3": "The conclusion is reflective: you identify that weekend coding practice in the source system still limits one of the derived metrics, and you propose a cleaner staging rule.",
+          "4": "Referencing is consistent (Harvard) and supports both the clinical context and the technology choices.",
+          "5": "The video uses the live dashboard and a small set of derived metrics to explain what the pipeline actually changes for a ward manager.",
+          "6": "Implementation is demonstrated end-to-end, including incremental load. A little more time on failure handling would have strengthened an already strong walkthrough."
+        },
+        "overallComments": "A strong CW2. The pipeline is justified, the analysis answers the stated operational question, and the video shows real use of the stack. A little more on operational failure modes would have added polish. Marks are provisional and subject to the exam board."
+      }
+    },
+    {
+      "demo": true,
+      "demoTag": "FICTIONAL-SIG-DEMO",
+      "id": "DEMO002",
+      "name": "Riley Vasquez",
+      "score": 69,
+      "status": "registered",
+      "committedStatus": "registered",
+      "nonSubmission": false,
+      "feedback": "",
+      "issues": [],
+      "ecDetails": {},
+      "resitDetails": {},
+      "timeline": [],
+      "qualityAcknowledgements": {},
+      "rubricData": {
+        "scores": [
+          11,
+          18,
+          14,
+          3.5,
+          3.5,
+          7,
+          12
+        ],
+        "notAttempted": [
+          false,
+          false,
+          false,
+          false,
+          false,
+          false,
+          false
+        ],
+        "selectedFeedback": [
+          {
+            "critIndex": 0,
+            "subIndex": 0,
+            "pointIndex": 0
+          },
+          {
+            "critIndex": 1,
+            "subIndex": 0,
+            "pointIndex": 0
+          },
+          {
+            "critIndex": 2,
+            "subIndex": 0,
+            "pointIndex": 0
+          },
+          {
+            "critIndex": 3,
+            "subIndex": 0,
+            "pointIndex": 0
+          },
+          {
+            "critIndex": 4,
+            "subIndex": 0,
+            "pointIndex": 0
+          },
+          {
+            "critIndex": 5,
+            "subIndex": 0,
+            "pointIndex": 0
+          },
+          {
+            "critIndex": 6,
+            "subIndex": 1,
+            "pointIndex": 0
+          }
+        ],
+        "criteriaComments": {
+          "0": "Problem and datasets are well chosen. The rationale is strong; a slightly sharper statement of what cannot be answered from these sources would have taken this into a fully secure distinction.",
+          "1": "Technology selection is sound and documented. Architecture diagrams are clear. Scalability is discussed, though mainly in qualitative terms.",
+          "2": "Analysis is complex and well visualised. A second cut by admission type would have added nuance at the boundary of this band.",
+          "3": "Reflection is honest about sample-size limits in one site.",
+          "4": "Sources are correctly cited and appropriate.",
+          "5": "Video commentary is fluent and the metrics are explained rather than merely shown.",
+          "6": "Functionality is demonstrated cleanly. Cluster configuration is shown but not stress-tested."
+        },
+        "overallComments": "Secure work just below distinction overall. Evidence is consistently at the top of commendation / low distinction. No mark has been adjusted because of the boundary; the profile is internally consistent. Marks are provisional."
+      }
+    },
+    {
+      "demo": true,
+      "demoTag": "FICTIONAL-SIG-DEMO",
+      "id": "DEMO003",
+      "name": "Samira Okonkwo",
+      "score": 65,
+      "status": "registered",
+      "committedStatus": "registered",
+      "nonSubmission": false,
+      "feedback": "",
+      "issues": [
+        {
+          "id": 7450031,
+          "type": "query",
+          "text": "Video demonstration link initially returned access denied. Tutor requested permissions; student granted access the same day. Recording reviewed after access was available. The mark reflects the work, not the access delay.",
+          "date": "24 Sep 2026",
+          "resolved": true
+        }
+      ],
+      "ecDetails": {},
+      "resitDetails": {},
+      "timeline": [
+        {
+          "date": "24 Sep 2026, 10:15",
+          "author": "DEMO Presenter",
+          "type": "note",
+          "text": "Video link returned access denied on first attempt."
+        },
+        {
+          "date": "24 Sep 2026, 10:40",
+          "author": "DEMO Presenter",
+          "type": "email",
+          "text": "Email sent requesting view permission on the demonstration recording."
+        },
+        {
+          "date": "24 Sep 2026, 16:05",
+          "author": "DEMO Presenter",
+          "type": "note",
+          "text": "Access provided. Demonstration reviewed. Issue closed; mark not adjusted for the access delay."
+        }
+      ],
+      "qualityAcknowledgements": {},
+      "rubricData": {
+        "scores": [
+          10,
+          16,
+          13,
+          3,
+          3,
+          7,
+          13
+        ],
+        "notAttempted": [
+          false,
+          false,
+          false,
+          false,
+          false,
+          false,
+          false
+        ],
+        "selectedFeedback": [
+          {
+            "critIndex": 0,
+            "subIndex": 1,
+            "pointIndex": 0
+          },
+          {
+            "critIndex": 1,
+            "subIndex": 1,
+            "pointIndex": 0
+          },
+          {
+            "critIndex": 2,
+            "subIndex": 1,
+            "pointIndex": 0
+          },
+          {
+            "critIndex": 3,
+            "subIndex": 1,
+            "pointIndex": 0
+          },
+          {
+            "critIndex": 4,
+            "subIndex": 1,
+            "pointIndex": 0
+          },
+          {
+            "critIndex": 5,
+            "subIndex": 0,
+            "pointIndex": 0
+          },
+          {
+            "critIndex": 6,
+            "subIndex": 1,
+            "pointIndex": 0
+          }
+        ],
+        "criteriaComments": {
+          "0": "The problem area is identified with a coherent operational question. Dataset selection is appropriate; the justification could go further on representativeness.",
+          "1": "Hadoop/Spark is a reasonable stack for the brief. Alternatives are noted. Documentation covers the main flows, with some gaps in error paths.",
+          "2": "Analysis of the large extract is logical and produces usable tables and charts. Insights are clear if not especially surprising.",
+          "3": "You reflect on the solution and note one improvement; a fuller critique of method would help.",
+          "4": "Referencing is generally accurate with a small number of incomplete web sources.",
+          "5": "The demonstration presents the key metrics with enough commentary to follow the argument.",
+          "6": "The pipeline is shown working on the provided sample. Understanding of the stack is good rather than excellent."
+        },
+        "overallComments": "A clear merit profile: competent engineering, intelligible analysis, and a working demonstration. Further depth in evaluation and architecture would be needed for distinction. Marks are provisional."
+      }
+    },
+    {
+      "demo": true,
+      "demoTag": "FICTIONAL-SIG-DEMO",
+      "id": "DEMO004",
+      "name": "Devon Lang",
+      "score": 59,
+      "status": "registered",
+      "committedStatus": "registered",
+      "nonSubmission": false,
+      "feedback": "",
+      "issues": [],
+      "ecDetails": {},
+      "resitDetails": {},
+      "timeline": [],
+      "qualityAcknowledgements": {},
+      "rubricData": {
+        "scores": [
+          9,
+          15,
+          12,
+          3,
+          3,
+          6,
+          11
+        ],
+        "notAttempted": [
+          false,
+          false,
+          false,
+          false,
+          false,
+          false,
+          false
+        ],
+        "selectedFeedback": [
+          {
+            "critIndex": 0,
+            "subIndex": 1,
+            "pointIndex": 0
+          },
+          {
+            "critIndex": 1,
+            "subIndex": 1,
+            "pointIndex": 0
+          },
+          {
+            "critIndex": 2,
+            "subIndex": 1,
+            "pointIndex": 0
+          },
+          {
+            "critIndex": 3,
+            "subIndex": 1,
+            "pointIndex": 0
+          },
+          {
+            "critIndex": 4,
+            "subIndex": 1,
+            "pointIndex": 0
+          },
+          {
+            "critIndex": 5,
+            "subIndex": 1,
+            "pointIndex": 0
+          },
+          {
+            "critIndex": 6,
+            "subIndex": 2,
+            "pointIndex": 0
+          }
+        ],
+        "criteriaComments": {
+          "0": "A relevant problem is identified. Dataset choice is reasonable, but the discussion of limitations is brief.",
+          "1": "Technology is appropriate and alternatives are mentioned. Documentation is adequate; architecture is described more than designed.",
+          "2": "Analysis is competent and uses a large file. Visualisations are simple but relevant.",
+          "3": "Some reflection is present. Weaknesses are noted without a concrete improvement plan.",
+          "4": "Referencing meets the minimum academic standard.",
+          "5": "Metrics in the video are clear. Delivery is a little rushed.",
+          "6": "The demo shows the jobs running. Explanation of shuffle and partitioning is thin, which keeps this just below merit on this criterion."
+        },
+        "overallComments": "Work sits just below the merit boundary on the overall total. The video-functionality criterion is the main drag. The profile has been reviewed against the rubric; the mark has not been raised because it is near a boundary. Marks are provisional."
+      }
+    },
+    {
+      "demo": true,
+      "demoTag": "FICTIONAL-SIG-DEMO",
+      "id": "DEMO005",
+      "name": "Quinn Fairchild",
+      "score": 55,
+      "status": "registered",
+      "committedStatus": "registered",
+      "nonSubmission": false,
+      "feedback": "",
+      "issues": [
+        {
+          "id": 7450051,
+          "type": "general",
+          "text": "Submitted PDF opened but several figures on pages 12–14 did not render. Tutor checked the downloaded copy, requested a re-export, and received a readable file. Marking used the readable copy. The mark was not changed because a clearer file was supplied.",
+          "date": "25 Sep 2026",
+          "resolved": true
+        }
+      ],
+      "ecDetails": {},
+      "resitDetails": {},
+      "timeline": [
+        {
+          "date": "25 Sep 2026, 09:20",
+          "author": "DEMO Presenter",
+          "type": "note",
+          "text": "Figures on pages 12–14 failed to render in the original PDF."
+        },
+        {
+          "date": "25 Sep 2026, 09:35",
+          "author": "DEMO Presenter",
+          "type": "email",
+          "text": "Student contacted and asked to re-export the report through the approved submission route."
+        },
+        {
+          "date": "25 Sep 2026, 14:10",
+          "author": "DEMO Presenter",
+          "type": "note",
+          "text": "Readable copy received. Marking continued. Issue resolved."
+        }
+      ],
+      "qualityAcknowledgements": {},
+      "rubricData": {
+        "scores": [
+          8,
+          14,
+          11,
+          2.7,
+          2.8,
+          5.5,
+          11
+        ],
+        "notAttempted": [
+          false,
+          false,
+          false,
+          false,
+          false,
+          false,
+          false
+        ],
+        "selectedFeedback": [
+          {
+            "critIndex": 0,
+            "subIndex": 2,
+            "pointIndex": 0
+          },
+          {
+            "critIndex": 1,
+            "subIndex": 2,
+            "pointIndex": 0
+          },
+          {
+            "critIndex": 2,
+            "subIndex": 2,
+            "pointIndex": 0
+          },
+          {
+            "critIndex": 3,
+            "subIndex": 2,
+            "pointIndex": 0
+          },
+          {
+            "critIndex": 4,
+            "subIndex": 2,
+            "pointIndex": 0
+          },
+          {
+            "critIndex": 5,
+            "subIndex": 2,
+            "pointIndex": 0
+          },
+          {
+            "critIndex": 6,
+            "subIndex": 2,
+            "pointIndex": 0
+          }
+        ],
+        "criteriaComments": {
+          "0": "The problem is stated and a dataset is selected with a basic but clear rationale. Links from data to decision are underdeveloped.",
+          "1": "The stack used is workable for the scenario. Documentation includes a control-flow diagram. Scalability is asserted rather than examined.",
+          "2": "A large sample is analysed with basic graphs. Findings are understandable; complexity is limited.",
+          "3": "Concluding comments recap the work. Deeper evaluation of method is needed.",
+          "4": "A small set of sources is cited, with some formatting inconsistency.",
+          "5": "The video reports a few summary metrics. Insight is present but narrow.",
+          "6": "A working job is demonstrated. Understanding of the platform is adequate for a pass."
+        },
+        "overallComments": "A clear pass. The submission meets the brief with limited depth in analysis and evaluation. Marks are provisional."
+      }
+    },
+    {
+      "demo": true,
+      "demoTag": "FICTIONAL-SIG-DEMO",
+      "id": "DEMO006",
+      "name": "Taylor Brennan",
+      "score": 49,
+      "status": "registered",
+      "committedStatus": "registered",
+      "nonSubmission": false,
+      "feedback": "",
+      "issues": [],
+      "ecDetails": {},
+      "resitDetails": {},
+      "timeline": [],
+      "qualityAcknowledgements": {},
+      "rubricData": {
+        "scores": [
+          8,
+          13,
+          10,
+          2.5,
+          2.5,
+          5,
+          8
+        ],
+        "notAttempted": [
+          false,
+          false,
+          false,
+          false,
+          false,
+          false,
+          false
+        ],
+        "selectedFeedback": [
+          {
+            "critIndex": 0,
+            "subIndex": 2,
+            "pointIndex": 0
+          },
+          {
+            "critIndex": 1,
+            "subIndex": 2,
+            "pointIndex": 0
+          },
+          {
+            "critIndex": 2,
+            "subIndex": 2,
+            "pointIndex": 0
+          },
+          {
+            "critIndex": 3,
+            "subIndex": 2,
+            "pointIndex": 0
+          },
+          {
+            "critIndex": 4,
+            "subIndex": 2,
+            "pointIndex": 0
+          },
+          {
+            "critIndex": 5,
+            "subIndex": 2,
+            "pointIndex": 0
+          }
+        ],
+        "criteriaComments": {
+          "0": "A problem area is identified and a public dataset is named. Justification is enough for a pass, though the operational question could be tighter.",
+          "1": "The chosen tools are plausible. Documentation of the pipeline is basic and would not fully support handover.",
+          "2": "Analysis is attempted on a large file and produces some tables. Interpretation stays close to descriptive counts.",
+          "3": "A short conclusion is offered. Limited critique of method.",
+          "4": "A handful of references are included.",
+          "5": "The video restates the tables already in the report. Little additional insight."
+        },
+        "overallComments": "The report reaches a pass on several written criteria, but the demonstrated functionality is weak and the overall total sits at 49%. This is a borderline mark and also sits within the potential condonable-fail range — check applicable programme regulations. The mark has not been adjusted because of the boundary. Marks are provisional."
+      }
+    },
+    {
+      "demo": true,
+      "demoTag": "FICTIONAL-SIG-DEMO",
+      "id": "DEMO007",
+      "name": "Casey Whitmore",
+      "score": 46,
+      "status": "registered",
+      "committedStatus": "registered",
+      "nonSubmission": false,
+      "feedback": "",
+      "issues": [],
+      "ecDetails": {},
+      "resitDetails": {},
+      "timeline": [],
+      "qualityAcknowledgements": {},
+      "rubricData": {
+        "scores": [
+          7,
+          12,
+          10,
+          2.5,
+          2.5,
+          5,
+          7
+        ],
+        "notAttempted": [
+          false,
+          false,
+          false,
+          false,
+          false,
+          false,
+          false
+        ],
+        "selectedFeedback": [
+          {
+            "critIndex": 0,
+            "subIndex": 3,
+            "pointIndex": 0
+          },
+          {
+            "critIndex": 1,
+            "subIndex": 3,
+            "pointIndex": 0
+          },
+          {
+            "critIndex": 2,
+            "subIndex": 2,
+            "pointIndex": 0
+          },
+          {
+            "critIndex": 3,
+            "subIndex": 2,
+            "pointIndex": 0
+          },
+          {
+            "critIndex": 4,
+            "subIndex": 2,
+            "pointIndex": 0
+          },
+          {
+            "critIndex": 5,
+            "subIndex": 2,
+            "pointIndex": 0
+          },
+          {
+            "critIndex": 6,
+            "subIndex": 3,
+            "pointIndex": 0
+          }
+        ],
+        "criteriaComments": {
+          "0": "The problem is only partly specified and the dataset discussion is thin, which keeps this below the pass threshold for this criterion.",
+          "1": "Tool choice is stated with little comparison. Documentation is incomplete.",
+          "2": "Some analysis of a large extract is present and meets a pass on this criterion, but it is largely descriptive.",
+          "3": "A brief concluding paragraph is included.",
+          "4": "A small reference list is present.",
+          "5": "A short video shows a few counts. Insight is limited.",
+          "6": "Only fragments of the pipeline are demonstrated. It is not clear that the platform has been used beyond tutorials."
+        },
+        "overallComments": "Several criteria are below the pass descriptor, particularly problem framing, solution documentation and the live demonstration. The overall total sits in the potential condonable-fail range. This is not an automatic condonement decision. Marks are provisional."
+      }
+    },
+    {
+      "demo": true,
+      "demoTag": "FICTIONAL-SIG-DEMO",
+      "id": "DEMO008",
+      "name": "Avery Lindholm",
+      "score": 36,
+      "status": "registered",
+      "committedStatus": "registered",
+      "nonSubmission": false,
+      "feedback": "",
+      "issues": [],
+      "ecDetails": {},
+      "resitDetails": {},
+      "timeline": [],
+      "qualityAcknowledgements": {},
+      "rubricData": {
+        "scores": [
+          6,
+          10,
+          8,
+          2,
+          0,
+          3,
+          7
+        ],
+        "notAttempted": [
+          false,
+          false,
+          false,
+          false,
+          false,
+          false,
+          false
+        ],
+        "selectedFeedback": [
+          {
+            "critIndex": 0,
+            "subIndex": 3,
+            "pointIndex": 0
+          },
+          {
+            "critIndex": 1,
+            "subIndex": 3,
+            "pointIndex": 0
+          },
+          {
+            "critIndex": 2,
+            "subIndex": 3,
+            "pointIndex": 0
+          },
+          {
+            "critIndex": 3,
+            "subIndex": 3,
+            "pointIndex": 0
+          },
+          {
+            "critIndex": 4,
+            "subIndex": 3,
+            "pointIndex": 0
+          },
+          {
+            "critIndex": 5,
+            "subIndex": 3,
+            "pointIndex": 0
+          },
+          {
+            "critIndex": 6,
+            "subIndex": 3,
+            "pointIndex": 0
+          }
+        ],
+        "criteriaComments": {
+          "0": "The core problem is not established. Dataset selection is largely unexplained.",
+          "1": "Technology is named without relating it to the scenario. Documentation is missing several required artefacts.",
+          "2": "Analysis is limited and the outputs add little. Justification for the methods is weak.",
+          "3": "Concluding comments are largely a restatement of the task title.",
+          "4": "A reference heading is present, but the list contains no usable academic sources. This criterion was attempted and is awarded 0; it is not recorded as Not Attempted.",
+          "5": "The video is short and does not explain the metrics shown.",
+          "6": "A partial notebook is opened. It does not demonstrate a working big-data pipeline."
+        },
+        "overallComments": "The submission does not meet the CW2 brief at MSc pass standard. Problem, solution, analysis and demonstration are under-evidenced. Referencing was attempted but awarded 0 (assessed, not Not Attempted). This is a clear fail. Marks are provisional."
+      }
+    },
+    {
+      "demo": true,
+      "demoTag": "FICTIONAL-SIG-DEMO",
+      "id": "DEMO009",
+      "name": "Rowan Calder",
+      "score": 67,
+      "status": "resit",
+      "committedStatus": "resit",
+      "nonSubmission": false,
+      "feedback": "",
+      "issues": [],
+      "ecDetails": {},
+      "resitDetails": {
+        "previousMark": 42,
+        "attemptNumber": 2,
+        "capped": true
+      },
+      "timeline": [
+        {
+          "date": "18 Sep 2026, 11:00",
+          "author": "DEMO Presenter",
+          "type": "status",
+          "text": "Status changed: Registered → Resit Student"
+        },
+        {
+          "date": "18 Sep 2026, 11:02",
+          "author": "DEMO Presenter",
+          "type": "note",
+          "text": "Cap at pass threshold enabled for this resit attempt. Academic mark retained separately from recorded mark."
+        }
+      ],
+      "qualityAcknowledgements": {},
+      "rubricData": {
+        "scores": [
+          11,
+          17,
+          13,
+          3.5,
+          3.5,
+          7,
+          12
+        ],
+        "notAttempted": [
+          false,
+          false,
+          false,
+          false,
+          false,
+          false,
+          false
+        ],
+        "selectedFeedback": [
+          {
+            "critIndex": 0,
+            "subIndex": 0,
+            "pointIndex": 0
+          },
+          {
+            "critIndex": 1,
+            "subIndex": 1,
+            "pointIndex": 0
+          },
+          {
+            "critIndex": 2,
+            "subIndex": 1,
+            "pointIndex": 0
+          },
+          {
+            "critIndex": 3,
+            "subIndex": 0,
+            "pointIndex": 0
+          },
+          {
+            "critIndex": 4,
+            "subIndex": 0,
+            "pointIndex": 0
+          },
+          {
+            "critIndex": 5,
+            "subIndex": 0,
+            "pointIndex": 0
+          },
+          {
+            "critIndex": 6,
+            "subIndex": 1,
+            "pointIndex": 0
+          }
+        ],
+        "criteriaComments": {
+          "0": "Resit submission: the problem framing is now clearer and the dataset rationale is substantially improved on the previous attempt.",
+          "1": "The revised architecture is better documented, with a workable Spark plan and a short comparison of stores.",
+          "2": "Analysis is more purposeful, with two well-chosen visuals. It remains short of distinction in depth.",
+          "3": "Reflection now identifies a concrete limitation in the join keys.",
+          "4": "Referencing has been brought up to a good standard.",
+          "5": "The video is better structured and explains the metrics.",
+          "6": "Functionality is demonstrated. This remains a resit attempt and is recorded as capped at the pass threshold."
+        },
+        "overallComments": "A much improved resit. Academic/raw performance is at merit. Because this attempt is recorded as a capped resit, the recorded mark is capped at the pass threshold. The academic mark has not been overwritten. Marks are provisional."
+      }
+    },
+    {
+      "demo": true,
+      "demoTag": "FICTIONAL-SIG-DEMO",
+      "id": "DEMO010",
+      "name": "Sloane Petrov",
+      "score": 48,
+      "status": "registered",
+      "committedStatus": "registered",
+      "nonSubmission": false,
+      "feedback": "",
+      "issues": [
+        {
+          "id": 7450101,
+          "type": "missing",
+          "text": "One assessed component was not attempted/submitted: Video Demonstration — Functionality. Recorded as Not Attempted (0) with explanatory comment. Student contacted. Awaiting response on whether a technical fault prevented the demo.",
+          "date": "26 Sep 2026",
+          "resolved": false
+        }
+      ],
+      "ecDetails": {},
+      "resitDetails": {},
+      "timeline": [
+        {
+          "date": "26 Sep 2026, 11:10",
+          "author": "DEMO Presenter",
+          "type": "note",
+          "text": "No working demonstration of pipeline functionality in the submission."
+        },
+        {
+          "date": "26 Sep 2026, 11:25",
+          "author": "DEMO Presenter",
+          "type": "email",
+          "text": "Student emailed to confirm whether a technical fault prevented the functionality demo."
+        },
+        {
+          "date": "26 Sep 2026, 11:30",
+          "author": "DEMO Presenter",
+          "type": "note",
+          "text": "Criterion marked Not Attempted (0). Not treated as unmarked. Awaiting student response."
+        }
+      ],
+      "qualityAcknowledgements": {},
+      "rubricData": {
+        "scores": [
+          9,
+          15,
+          12,
+          3,
+          3,
+          6,
+          0
+        ],
+        "notAttempted": [
+          false,
+          false,
+          false,
+          false,
+          false,
+          false,
+          true
+        ],
+        "selectedFeedback": [
+          {
+            "critIndex": 0,
+            "subIndex": 1,
+            "pointIndex": 0
+          },
+          {
+            "critIndex": 1,
+            "subIndex": 1,
+            "pointIndex": 0
+          },
+          {
+            "critIndex": 2,
+            "subIndex": 1,
+            "pointIndex": 0
+          },
+          {
+            "critIndex": 3,
+            "subIndex": 1,
+            "pointIndex": 0
+          },
+          {
+            "critIndex": 4,
+            "subIndex": 1,
+            "pointIndex": 0
+          },
+          {
+            "critIndex": 5,
+            "subIndex": 1,
+            "pointIndex": 0
+          }
+        ],
+        "criteriaComments": {
+          "0": "Problem and dataset discussion are adequate, with a coherent reason for using the chosen open extract.",
+          "1": "Solution design is documented at a pass/commendation level. The batch path is clear.",
+          "2": "Analysis of the extract is reasonable and supported by tables.",
+          "3": "Some reflection is included.",
+          "4": "Referencing is appropriate.",
+          "5": "A short clip explains the summary metrics from the report.",
+          "6": "This component was not attempted; therefore no marks were awarded. No working pipeline demonstration was present in the submission. Recorded as Not Attempted (0), not unmarked, and not as an assessed fail after attempt."
+        },
+        "overallComments": "Written and video-insight components are at pass/commendation. Video Demonstration — Functionality was not attempted: notAttempted is set, score is 0, and an explanatory comment is recorded. This is distinct from an assessed 0 after attempt. The overall total follows from the remaining criteria. Marks are provisional."
+      }
+    },
+    {
+      "demo": true,
+      "demoTag": "FICTIONAL-SIG-DEMO",
+      "id": "DEMO011",
+      "name": "Blake Sundaram",
+      "score": 0,
+      "status": "ns",
+      "committedStatus": "ns",
+      "nonSubmission": true,
+      "feedback": "",
+      "issues": [
+        {
+          "id": 7450111,
+          "type": "missing",
+          "text": "No submission visible at the marking deadline. Submission location checked; student record checked; student contacted and the appropriate team notified. Status recorded as Non-Submission.",
+          "date": "23 Sep 2026",
+          "resolved": false
+        }
+      ],
+      "ecDetails": {},
+      "resitDetails": {},
+      "timeline": [
+        {
+          "date": "23 Sep 2026, 09:05",
+          "author": "DEMO Presenter",
+          "type": "note",
+          "text": "No submission visible at the marking deadline."
+        },
+        {
+          "date": "23 Sep 2026, 09:12",
+          "author": "DEMO Presenter",
+          "type": "note",
+          "text": "Submission location and student record checked."
+        },
+        {
+          "date": "23 Sep 2026, 09:30",
+          "author": "DEMO Presenter",
+          "type": "email",
+          "text": "Student contacted; appropriate team notified."
+        },
+        {
+          "date": "23 Sep 2026, 09:40",
+          "author": "DEMO Presenter",
+          "type": "status",
+          "text": "Status changed: Registered → Non-Submission (NS)"
+        }
+      ],
+      "qualityAcknowledgements": {},
+      "rubricData": {
+        "scores": [
+          null,
+          null,
+          null,
+          null,
+          null,
+          null,
+          null
+        ],
+        "notAttempted": [
+          false,
+          false,
+          false,
+          false,
+          false,
+          false,
+          false
+        ],
+        "selectedFeedback": [],
+        "criteriaComments": {},
+        "overallComments": ""
+      }
+    },
+    {
+      "demo": true,
+      "demoTag": "FICTIONAL-SIG-DEMO",
+      "id": "DEMO012",
+      "name": "Reese Okada",
+      "score": 62,
+      "status": "registered",
+      "committedStatus": "registered",
+      "nonSubmission": false,
+      "feedback": "",
+      "issues": [
+        {
+          "id": 7450121,
+          "type": "query",
+          "text": "Submitted ZIP file cannot be extracted. Tutor unable to access supporting implementation files. Student contacted by email and asked to re-submit an accessible copy through the approved route. Accessible archive received 29 Sep. Marking completed on the accessible copy. The mark was not changed merely because clarification/files were supplied.",
+          "date": "28 Sep 2026",
+          "resolved": true
+        }
+      ],
+      "ecDetails": {},
+      "resitDetails": {},
+      "timeline": [
+        {
+          "date": "28 Sep 2026, 10:00",
+          "author": "DEMO Presenter",
+          "type": "note",
+          "text": "Submitted ZIP could not be extracted; implementation files inaccessible."
+        },
+        {
+          "date": "28 Sep 2026, 10:20",
+          "author": "DEMO Presenter",
+          "type": "email",
+          "text": "Student asked to confirm/re-submit an accessible copy through the approved route."
+        },
+        {
+          "date": "29 Sep 2026, 15:40",
+          "author": "DEMO Presenter",
+          "type": "note",
+          "text": "Accessible archive received. Marking completed. Issue resolved. Mark not adjusted for the resubmission of accessible files."
+        }
+      ],
+      "qualityAcknowledgements": {},
+      "rubricData": {
+        "scores": [
+          10,
+          16,
+          12,
+          3,
+          3,
+          6,
+          12
+        ],
+        "notAttempted": [
+          false,
+          false,
+          false,
+          false,
+          false,
+          false,
+          false
+        ],
+        "selectedFeedback": [
+          {
+            "critIndex": 0,
+            "subIndex": 1,
+            "pointIndex": 0
+          },
+          {
+            "critIndex": 1,
+            "subIndex": 1,
+            "pointIndex": 0
+          },
+          {
+            "critIndex": 2,
+            "subIndex": 1,
+            "pointIndex": 0
+          },
+          {
+            "critIndex": 3,
+            "subIndex": 1,
+            "pointIndex": 0
+          },
+          {
+            "critIndex": 4,
+            "subIndex": 1,
+            "pointIndex": 0
+          },
+          {
+            "critIndex": 5,
+            "subIndex": 1,
+            "pointIndex": 0
+          },
+          {
+            "critIndex": 6,
+            "subIndex": 1,
+            "pointIndex": 0
+          }
+        ],
+        "criteriaComments": {
+          "0": "After the resubmitted archive could be opened, the problem analysis is clearly at merit: a well-scoped logistics question and a justified extract.",
+          "1": "The pipeline design is coherent and alternatives are considered. Diagrams are readable.",
+          "2": "Analysis is solid, with useful aggregations. Visuals are competent rather than advanced.",
+          "3": "Reflection is thoughtful about late-arriving records.",
+          "4": "Referencing is accurate.",
+          "5": "The video is clear once access was granted. Metrics are explained.",
+          "6": "Implementation is demonstrated successfully. Understanding of the stack is good."
+        },
+        "overallComments": "A solid merit submission once the archive could be opened. Implementation, analysis and video are aligned. The ZIP issue delayed access; it did not change the academic judgement. Marks are provisional."
+      }
+    }
+  ],
+  "moduleTasks": [
+    {
+      "id": 7451001,
+      "title": "COM745 CW2 marking standardisation",
+      "description": "Review application of the CW2 rubric across teaching groups before substantive marking. [DEMO / FICTIONAL]",
+      "priority": "high",
+      "deadline": "2026-09-19",
+      "status": "resolved",
+      "created": "12 Sep 2026",
+      "notes": [
+        {
+          "type": "meeting",
+          "author": "DEMO Presenter",
+          "date": "12 Sep 2026, 14:00",
+          "text": "CW2 standardisation discussion completed with teaching team."
+        },
+        {
+          "type": "note",
+          "author": "DEMO Presenter",
+          "date": "12 Sep 2026, 15:10",
+          "text": "Sample scripts discussed across distinction, pass and fail bands."
+        },
+        {
+          "type": "action",
+          "author": "DEMO Presenter",
+          "date": "12 Sep 2026, 16:00",
+          "text": "Agreed approach recorded: apply published band descriptors; do not raise a mark solely because it is near a boundary."
+        }
+      ]
+    },
+    {
+      "id": 7451002,
+      "title": "Clarify COM745 CW2 rubric interpretation",
+      "description": "Discuss interpretation of evidence expected for Video Demonstration: Functionality versus Insight Offered into Data, so the two video criteria are not double-counted. [DEMO / FICTIONAL]",
+      "priority": "medium",
+      "deadline": "2026-09-18",
+      "status": "resolved",
+      "created": "15 Sep 2026",
+      "notes": [
+        {
+          "type": "email",
+          "author": "DEMO Presenter",
+          "date": "15 Sep 2026, 09:30",
+          "text": "Clarification request sent to module counterpart."
+        },
+        {
+          "type": "note",
+          "author": "DEMO Presenter",
+          "date": "16 Sep 2026, 11:00",
+          "text": "Agreed that Insight is about metrics/communication of findings; Functionality is about demonstrating a working pipeline."
+        },
+        {
+          "type": "action",
+          "author": "DEMO Presenter",
+          "date": "16 Sep 2026, 11:20",
+          "text": "Guidance shared with the teaching team."
+        }
+      ]
+    },
+    {
+      "id": 7451003,
+      "title": "Prepare COM745 CW2 sample for moderation",
+      "description": "Identify representative scripts across mark bands and prepare marking/feedback evidence for moderation. [DEMO / FICTIONAL]",
+      "priority": "high",
+      "deadline": "2026-10-10",
+      "status": "in-progress",
+      "created": "29 Sep 2026",
+      "notes": [
+        {
+          "type": "note",
+          "author": "DEMO Presenter",
+          "date": "29 Sep 2026, 16:00",
+          "text": "Distinction sample selected (DEMO001)."
+        },
+        {
+          "type": "note",
+          "author": "DEMO Presenter",
+          "date": "29 Sep 2026, 16:05",
+          "text": "Merit sample selected (DEMO003). Borderline/pass sample selected (DEMO006 / DEMO005). Fail sample selected (DEMO008)."
+        },
+        {
+          "type": "note",
+          "author": "DEMO Presenter",
+          "date": "29 Sep 2026, 16:08",
+          "text": "Capped resit (DEMO009) identified separately from the first-sit sample."
+        }
+      ]
+    },
+    {
+      "id": 7451004,
+      "title": "Review COM745 CW2 boundary cases",
+      "description": "Review students close to key academic thresholds for consistent application of the rubric. This is a review of evidence — not an instruction to increase marks. [DEMO / FICTIONAL]",
+      "priority": "high",
+      "deadline": "2026-10-08",
+      "status": "open",
+      "created": "30 Sep 2026",
+      "notes": [
+        {
+          "type": "note",
+          "author": "DEMO Presenter",
+          "date": "30 Sep 2026, 10:00",
+          "text": "Cases queued: DEMO002 (69%), DEMO004 (59%), DEMO006 (49%)."
+        },
+        {
+          "type": "meeting",
+          "author": "DEMO Presenter",
+          "date": "02 Oct 2026, 13:00",
+          "text": "Boundary review meeting booked. Agenda is rubric consistency only."
+        }
+      ]
+    },
+    {
+      "id": 7451005,
+      "title": "COM745 CW2 feedback consistency review",
+      "description": "Review a sample of feedback across tutors/groups for clarity, constructiveness and alignment with rubric criteria. Use Quality Check and Copy for AI Review as supporting tools; academic judgement remains with the tutor. [DEMO / FICTIONAL]",
+      "priority": "medium",
+      "deadline": "2026-10-09",
+      "status": "in-progress",
+      "created": "01 Oct 2026",
+      "notes": [
+        {
+          "type": "note",
+          "author": "DEMO Presenter",
+          "date": "01 Oct 2026, 09:15",
+          "text": "Sample list: DEMO001, DEMO006, DEMO008, DEMO012."
+        },
+        {
+          "type": "action",
+          "author": "DEMO Presenter",
+          "date": "01 Oct 2026, 09:20",
+          "text": "Quality Check to be run on DEMO006 before feedback release."
+        }
+      ]
+    },
+    {
+      "id": 7451006,
+      "title": "Complete COM745 CW2 marking",
+      "description": "Complete marking and feedback within the agreed demonstration marking window (not an institutional deadline). [DEMO / FICTIONAL]",
+      "priority": "urgent",
+      "deadline": "2026-10-13",
+      "status": "in-progress",
+      "created": "22 Sep 2026",
+      "notes": [
+        {
+          "type": "note",
+          "author": "DEMO Presenter",
+          "date": "22 Sep 2026, 17:00",
+          "text": "Marking window opened after standardisation."
+        },
+        {
+          "type": "note",
+          "author": "DEMO Presenter",
+          "date": "06 Oct 2026, 09:00",
+          "text": "Most first-sit scripts marked. NS and Not Attempted cases remain flagged."
+        }
+      ]
+    },
+    {
+      "id": 7451007,
+      "title": "Share CW2 marking clarification with teaching team",
+      "description": "Circulate agreed interpretation/standardisation notes following discussion with counterpart/module leader. [DEMO / FICTIONAL]",
+      "priority": "low",
+      "deadline": "2026-09-20",
+      "status": "waiting",
+      "created": "16 Sep 2026",
+      "notes": [
+        {
+          "type": "email",
+          "author": "DEMO Presenter",
+          "date": "16 Sep 2026, 12:00",
+          "text": "Draft clarification note sent to teaching team for comment."
+        },
+        {
+          "type": "note",
+          "author": "DEMO Presenter",
+          "date": "17 Sep 2026, 08:45",
+          "text": "Awaiting one group confirmation before filing the note."
+        }
+      ]
+    }
+  ],
+  "deadlines": {
+    "submission": "2026-09-22",
+    "marking": "2026-10-13",
+    "moderation": "2026-10-20",
+    "feedback": "2026-10-27"
+  },
+  "settings": {
+    "programmeLevel": "msc",
+    "customPassMark": 50
+  },
+  "savedAt": "2026-10-06T10:00:00.000Z",
+  "rubricMetadata": {
+    "module_code": "COM745",
+    "module_title": "Big Data and Infrastructure",
+    "course_work": "CW2 Assignment",
+    "partner": "Ulster University",
+    "semester": "DEMO S1 2026 (fictitious instance)",
+    "tutor_name": "DEMO Presenter"
+  }
+}
